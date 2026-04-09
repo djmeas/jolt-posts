@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "7733:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - app-data:/app/.data
+      - uploads-data:/app/public/uploads
+    restart: unless-stopped
+
+volumes:
+  app-data:
+    driver: local
+  uploads-data:
+    driver: local

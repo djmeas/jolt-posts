@@ -1,0 +1,29 @@
+# Nuxt
+.nuxt
+.output
+.data
+
+# Database
+*.db
+
+# Dependencies
+node_modules
+
+# Build
+dist
+
+# Env
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+*.log
+
+# Uploaded files
+public/uploads/*
