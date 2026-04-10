@@ -13,6 +13,8 @@
     "db:prepare": "node scripts/ensure-data-dir.mjs",
     "predb:migrate": "npm run db:prepare",
     "predev": "npm run db:prepare",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "vitest",
     "test:run": "vitest run"
   },
@@ -27,6 +29,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@nuxt/eslint": "^1.15.2",
     "@types/better-sqlite3": "^7.6.13",
     "drizzle-kit": "^0.31.9",
     "nuxt-mcp-dev": "^0.3.2",

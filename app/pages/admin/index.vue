@@ -2,9 +2,23 @@
 // AGENT: posts-admin
 definePageMeta({ middleware: 'auth' })
 
+interface Photo {
+  path: string
+  orderIndex: number
+}
+
+interface Post {
+  id: number
+  photoPath: string
+  description: string
+  createdAt: Date | number
+  heartCount?: number
+  photos?: Photo[]
+}
+
 const { clear } = useUserSession()
 const { isDark, toggle, init } = useTheme()
-const posts = ref<any[]>([])
+const posts = ref<Post[]>([])
 const hasMore = ref(true)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFiles = ref<File[]>([])
@@ -14,7 +28,7 @@ const uploading = ref(false)
 const dragOver = ref(false)
 
 const activeMenuPost = ref<number | null>(null)
-const editingPost = ref<any>(null)
+const editingPost = ref<Post | null>(null)
 const editDescription = ref('')
 const editDate = ref('')
 const editFileInput = ref<HTMLInputElement | null>(null)
@@ -38,13 +52,13 @@ onMounted(() => {
 })
 
 async function loadPosts() {
-  const { items, hasMore: more } = await $fetch<{ items: any[]; hasMore: boolean }>('/api/posts?limit=18&offset=0')
+  const { items, hasMore: more } = await $fetch<{ items: Post[]; hasMore: boolean }>('/api/posts?limit=18&offset=0')
   posts.value = items
   hasMore.value = more
 }
 
 async function loadMorePosts() {
-  const { items, hasMore: more } = await $fetch<{ items: any[]; hasMore: boolean }>(`/api/posts?limit=18&offset=${posts.value.length}`)
+  const { items, hasMore: more } = await $fetch<{ items: Post[]; hasMore: boolean }>(`/api/posts?limit=18&offset=${posts.value.length}`)
   posts.value.push(...items)
   hasMore.value = more
 }
@@ -184,11 +198,7 @@ function toggleMenu(postId: number) {
   activeMenuPost.value = activeMenuPost.value === postId ? null : postId
 }
 
-function closeMenu() {
-  activeMenuPost.value = null
-}
-
-function startEdit(post: any) {
+function startEdit(post: Post) {
   editingPost.value = post
   editDescription.value = post.description || ''
   editDate.value = post.createdAt ? new Date(post.createdAt).toISOString().slice(0, 16) : ''
@@ -217,7 +227,7 @@ function removeEditFile(index: number) {
   editPreviewUrls.value.splice(index, 1)
 }
 
-function moveEditFile(from: number, to: number) {
+function _moveEditFile(from: number, to: number) {
   if (to < 0 || to >= editSelectedFiles.value.length) return
   const files = editSelectedFiles.value
   const urls = editPreviewUrls.value
@@ -288,9 +298,9 @@ async function logout() {
   await navigateTo('/admin/login')
 }
 
-function getEditPhotos(post: any) {
+function getEditPhotos(post: Post) {
   if (post.photos && post.photos.length > 0) {
-    return post.photos.sort((a: any, b: any) => a.orderIndex - b.orderIndex)
+    return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)
   }
   return [{ path: post.photoPath, orderIndex: 0 }]
 }
@@ -307,9 +317,9 @@ function getEditPhotos(post: any) {
         </div>
         <div class="flex items-center gap-6">
           <button
-            @click="toggle"
             class="p-2 rounded-full transition-all duration-300 hover:scale-110"
             :class="isDark ? 'text-gray-400 hover:text-white bg-white/5' : 'text-gray-600 hover:text-gray-900 bg-black/5'"
+            @click="toggle"
           >
             <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -319,7 +329,7 @@ function getEditPhotos(post: any) {
             </svg>
           </button>
           <NuxtLink to="/" :class="isDark ? 'text-sm text-gray-400 hover:text-white transition-colors' : 'text-sm text-gray-600 hover:text-gray-900 transition-colors'">View Site</NuxtLink>
-          <button @click="logout" :class="isDark ? 'text-sm text-gray-400 hover:text-white transition-colors' : 'text-sm text-gray-600 hover:text-gray-900 transition-colors'">Logout</button>
+          <button :class="isDark ? 'text-sm text-gray-400 hover:text-white transition-colors' : 'text-sm text-gray-600 hover:text-gray-900 transition-colors'" @click="logout">Logout</button>
         </div>
       </div>
     </header>
@@ -343,10 +353,10 @@ function getEditPhotos(post: any) {
             @drop.prevent="handleDrop"
             @click="fileInput?.click()"
           >
-            <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" ></div>
             <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="handleFileSelect" />
             <div v-if="uploading" class="relative">
-              <div class="w-16 h-16 mx-auto border-4 border-white/20 border-t-pink-500 rounded-full animate-spin" />
+              <div class="w-16 h-16 mx-auto border-4 border-white/20 border-t-pink-500 rounded-full animate-spin" ></div>
               <p class="text-gray-400 mt-4">Uploading...</p>
             </div>
             <div v-else class="relative space-y-4">
@@ -360,8 +370,8 @@ function getEditPhotos(post: any) {
                 <p class="text-sm text-gray-500">or click to browse (up to 10 photos)</p>
               </div>
               <button
-                @click.stop
                 class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-full hover:from-purple-500 hover:to-pink-500 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
+                @click.stop
               >
                 Choose Files
               </button>
@@ -380,8 +390,8 @@ function getEditPhotos(post: any) {
               <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
                 <button
                   v-if="index > 0"
-                  @click="moveFile(index, index - 1)"
                   class="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-white/40 transition-colors"
+                  @click="moveFile(index, index - 1)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -389,16 +399,16 @@ function getEditPhotos(post: any) {
                 </button>
                 <button
                   v-if="index < previewUrls.length - 1"
-                  @click="moveFile(index, index + 1)"
                   class="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-white/40 transition-colors"
+                  @click="moveFile(index, index + 1)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
                 <button
-                  @click="removeFile(index)"
                   class="w-8 h-8 bg-red-500/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-red-500 transition-colors"
+                  @click="removeFile(index)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -429,23 +439,23 @@ function getEditPhotos(post: any) {
             :class="isDark 
               ? 'w-full px-5 py-4 bg-gradient-to-br from-gray-900 to-gray-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-pink-500/50 focus:ring-2 focus:ring-pink-500/20 transition-all duration-300 resize-none'
               : 'w-full px-5 py-4 bg-gradient-to-br from-gray-100 to-gray-200 border border-black/10 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-pink-500/50 focus:ring-2 focus:ring-pink-500/20 transition-all duration-300 resize-none'"
-          />
+          ></textarea>
           
           <div class="flex gap-3">
             <button
-              @click="clearSelection"
               class="flex-1 py-4 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all duration-300"
               :class="isDark ? 'text-white' : 'text-gray-900 bg-gray-200 hover:bg-gray-300'"
+              @click="clearSelection"
             >
               Cancel
             </button>
             <button
-              @click="publishPost"
               :disabled="uploading"
               class="flex-1 py-4 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white font-bold rounded-xl hover:from-purple-500 hover:via-pink-500 hover:to-orange-400 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-[1.02] active:scale-[0.98]"
+              @click="publishPost"
             >
               <span v-if="uploading" class="flex items-center justify-center gap-2">
-                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" ></div>
                 Publishing...
               </span>
               <span v-else>Publish</span>
@@ -467,9 +477,9 @@ function getEditPhotos(post: any) {
                 </div>
                 <input ref="avatarFileInput" type="file" accept="image/*" class="hidden" @change="saveAvatar" />
                 <button
-                  @click="avatarFileInput?.click()"
                   :disabled="savingAvatar"
                   class="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
+                  @click="avatarFileInput?.click()"
                 >
                   {{ savingAvatar ? 'Uploading...' : 'Upload Avatar' }}
                 </button>
@@ -490,9 +500,9 @@ function getEditPhotos(post: any) {
               />
             </div>
             <button
-              @click="saveSiteName"
               :disabled="savingSiteName"
               class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
+              @click="saveSiteName"
             >
               {{ savingSiteName ? 'Saving...' : 'Save' }}
             </button>
@@ -511,9 +521,9 @@ function getEditPhotos(post: any) {
               />
             </div>
             <button
-              @click="saveDisplayName"
               :disabled="savingDisplayName"
               class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
+              @click="saveDisplayName"
             >
               {{ savingDisplayName ? 'Saving...' : 'Save' }}
             </button>
@@ -532,9 +542,9 @@ function getEditPhotos(post: any) {
               />
             </div>
             <button
-              @click="saveSitePassword"
               :disabled="savingSitePassword"
               class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
+              @click="saveSitePassword"
             >
               {{ savingSitePassword ? 'Saving...' : 'Save' }}
             </button>
@@ -557,7 +567,7 @@ function getEditPhotos(post: any) {
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
                 </svg>
               </div>
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" ></div>
             </div>
             
             <div 
@@ -567,8 +577,8 @@ function getEditPhotos(post: any) {
               ]"
             >
               <button
-                @click.stop="toggleMenu(post.id)"
                 class="w-8 h-8 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                @click.stop="toggleMenu(post.id)"
               >
                 <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
@@ -584,9 +594,9 @@ function getEditPhotos(post: any) {
               >
                 <div class="post-context-menu" :class="isDark ? 'bg-black border border-white/20' : 'bg-white border-black/20'">
                   <button
-                    @click="startEdit(post)"
                     class="w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors"
                     :class="isDark ? 'text-white bg-gray-900 hover:bg-gray-700' : 'text-gray-900 bg-gray-50 hover:bg-gray-200'"
+                    @click="startEdit(post)"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -594,9 +604,9 @@ function getEditPhotos(post: any) {
                     Edit
                   </button>
                   <button
-                    @click="deletePost(post.id)"
                     class="w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors text-red-500"
                     :class="isDark ? 'bg-gray-900 hover:bg-red-500/20' : 'bg-gray-50 hover:bg-red-50'"
+                    @click="deletePost(post.id)"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -607,7 +617,8 @@ function getEditPhotos(post: any) {
               </div>
             </div>
             
-            <p v-if="post.description" :class="[
+            <p
+v-if="post.description" :class="[
               'absolute bottom-0 left-0 right-0 p-3 text-sm text-white/90 truncate z-10',
               'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300'
             ]">
@@ -624,8 +635,8 @@ function getEditPhotos(post: any) {
           </div>
           <div v-if="hasMore" class="col-span-3 text-center py-8">
             <button
-              @click="loadMorePosts"
               class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full hover:from-purple-400 hover:to-pink-400 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
+              @click="loadMorePosts"
             >
               Load More
             </button>
@@ -666,8 +677,8 @@ function getEditPhotos(post: any) {
                 <img :src="url" class="w-full h-full object-cover" />
                 <div class="absolute inset-0 flex items-center justify-center bg-black/40">
                   <button
-                    @click="removeEditFile(index)"
                     class="w-8 h-8 bg-red-500/80 rounded-full flex items-center justify-center text-white hover:bg-red-500 transition-colors"
+                    @click="removeEditFile(index)"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -677,9 +688,9 @@ function getEditPhotos(post: any) {
               </div>
               <button
                 v-if="editSelectedFiles.length < 10"
-                @click="editFileInput?.click()"
                 class="aspect-square rounded-lg border-2 border-dashed flex items-center justify-center"
                 :class="isDark ? 'border-white/20 hover:border-white/40' : 'border-black/20 hover:border-black/40'"
+                @click="editFileInput?.click()"
               >
                 <svg :class="isDark ? 'w-6 h-6 text-gray-500' : 'w-6 h-6 text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -694,7 +705,7 @@ function getEditPhotos(post: any) {
               :class="isDark 
                 ? 'w-full px-5 py-4 bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-pink-500/50 transition-all duration-300 resize-none'
                 : 'w-full px-5 py-4 bg-gradient-to-br from-gray-100 to-gray-200 border border-black/10 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-pink-500/50 transition-all duration-300 resize-none'"
-            />
+            ></textarea>
             
             <div>
               <label :class="isDark ? 'text-sm text-gray-400' : 'text-sm text-gray-600'">Date & Time</label>
@@ -709,16 +720,16 @@ function getEditPhotos(post: any) {
             
             <div class="flex gap-3 pt-2">
               <button
-                @click="showEditModal = false"
                 class="flex-1 py-3 bg-white/10 text-white font-medium rounded-xl hover:bg-white/20 transition-colors"
                 :class="isDark ? 'text-white' : 'text-gray-900 bg-gray-200 hover:bg-gray-300'"
+                @click="showEditModal = false"
               >
                 Cancel
               </button>
               <button
-                @click="saveEdit"
                 :disabled="uploading"
                 class="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
+                @click="saveEdit"
               >
                 {{ uploading ? 'Saving...' : 'Save' }}
               </button>

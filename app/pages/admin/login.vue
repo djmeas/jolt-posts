@@ -17,8 +17,8 @@ async function login(password: string) {
   try {
     await $fetch('/api/admin/login', { method: 'POST', body: { password } })
     await navigateTo('/admin')
-  } catch (e: any) {
-    error.value = e.data?.message || 'Invalid password'
+  } catch (e: unknown) {
+    error.value = (e as { data?: { message?: string } })?.data?.message || 'Invalid password'
   } finally {
     loading.value = false
   }
@@ -40,8 +40,8 @@ async function login(password: string) {
         <p class="text-gray-400">Admin Sign In</p>
       </div>
       
-      <form @submit.prevent="login(passwordInput!.value)" class="relative">
-        <div class="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-orange-500/20 rounded-2xl blur-xl" />
+      <form class="relative" @submit.prevent="login(passwordInput!.value)">
+        <div class="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-orange-500/20 rounded-2xl blur-xl" ></div>
         <div class="relative bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl p-8 shadow-2xl">
           <div class="space-y-5">
             <div>
@@ -63,7 +63,7 @@ async function login(password: string) {
               class="w-full py-4 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white font-bold rounded-xl hover:from-purple-500 hover:via-pink-500 hover:to-orange-400 transition-all duration-300 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="loading" class="flex items-center justify-center gap-2">
-                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" ></div>
                 Signing in...
               </span>
               <span v-else>Sign In</span>

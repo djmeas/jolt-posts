@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
       const filePath = join(process.cwd(), 'public', photo.photoPath)
       await unlink(filePath)
     } catch {
+      // File already deleted or doesn't exist - continue
     }
   }
 

@@ -75,7 +75,8 @@ App will be available at `http://localhost:7733`
 | `npm run db:generate` | Generate migrations from schema changes |
 | `npm run db:migrate` | Apply migrations to database |
 | `npm run lint` | Run ESLint |
-| `npm run typecheck` | Run TypeScript type checking |
+| `npm run lint:fix` | Auto-fix ESLint issues |
+| `npm run db:migrate` | Apply migrations to database |
 
 ## Environment Variables
 
@@ -231,6 +232,28 @@ RUN npm rebuild better-sqlite3
 - **Server routes**: `server/api/` with naming `[name].[method].ts`
 - **State**: Nuxt `useState` for global state, `ref`/`reactive` for local
 - **Styling**: Tailwind with custom gradient classes (purple→pink→orange theme)
+
+### Linting & Code Quality
+
+This project uses **@nuxt/eslint** for ESLint integration. Run `npm run lint` before committing.
+
+**Key rules enforced:**
+- `no-console`: Use `console.warn`/`console.error` only (no `console.log`)
+- `no-debugger`: No `debugger` statements
+- `vue/block-order`: Script → Template → Style
+- `vue/html-self-closing`: No self-closing non-void HTML elements (`<div/>` forbidden, `<br/>` allowed)
+- `vue/attributes-order`: `class` before `@click`/`v-if` etc.
+- `@typescript-eslint/no-unused-vars`: Prefix unused args/vars with `_`
+- `@typescript-eslint/no-explicit-any`: Avoid `any` - use proper types
+
+**Best practices when coding:**
+1. Run `npm run lint:fix` after major changes to auto-fix issues
+2. Fix unused imports/variables by prefixing with `_` or removing
+3. No `console.log` - use `console.warn` for warnings, `console.error` for errors
+4. HTML self-closing tags only for void elements (`<br>`, `<img>`, `<input>`)
+5. Put `class` attribute before event handlers (`@click`) and directives (`v-if`)
+6. Avoid `any` type - define proper interfaces/types
+7. Server route handlers should not have empty blocks
 
 ### TypeScript Patterns
 

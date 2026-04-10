@@ -51,8 +51,8 @@ async function login() {
         <p class="text-gray-400">Welcome back</p>
       </div>
       
-      <form @submit.prevent="login" class="relative">
-        <div class="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-orange-500/20 rounded-2xl blur-xl" />
+      <form class="relative" @submit.prevent="login">
+        <div class="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-orange-500/20 rounded-2xl blur-xl" ></div>
         <div class="relative bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl p-8 shadow-2xl">
           <div class="space-y-5">
             <div v-if="error" class="text-red-400 text-sm bg-red-500/10 px-4 py-3 rounded-xl border border-red-500/20">
@@ -86,7 +86,7 @@ async function login() {
               class="w-full py-4 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white font-bold rounded-xl hover:from-purple-500 hover:via-pink-500 hover:to-orange-400 transition-all duration-300 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="loading" class="flex items-center justify-center gap-2">
-                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" ></div>
                 Signing in...
               </span>
               <span v-else>Sign in</span>
