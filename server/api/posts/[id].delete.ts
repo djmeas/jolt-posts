@@ -1,6 +1,8 @@
 import { db } from '../../utils/db'
-import { posts } from '../../db/schema'
+import { posts, postPhotos } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+import { unlink } from 'fs/promises'
+import { join } from 'path'
 
 // AGENT: posts-delete
 export default defineEventHandler(async (event) => {
@@ -14,6 +16,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Invalid post ID' })
   }
 
+  const photos = await db.query.postPhotos.findMany({
+    where: (photos, { eq }) => eq(photos.postId, id)
+  })
+
+  for (const photo of photos) {
+    try {
+      const filePath = join(process.cwd(), 'public', photo.photoPath)
+      await unlink(filePath)
+    } catch {
+    }
+  }
+
+  await db.delete(postPhotos).where(eq(postPhotos.postId, id))
   await db.delete(posts).where(eq(posts.id, id))
 
   return { success: true }

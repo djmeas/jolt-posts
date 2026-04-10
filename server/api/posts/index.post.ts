@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { db } from '../../utils/db'
-import { posts } from '../../db/schema'
+import { posts, postPhotos } from '../../db/schema'
 
 // AGENT: posts-create
 const bodySchema = z.object({
-  photoPath: z.string().min(1, 'Photo path is required'),
+  photoPaths: z.array(z.string()).min(1, 'At least one photo is required').max(10, 'Maximum 10 photos allowed'),
   description: z.string().default('')
 })
 
@@ -26,8 +26,16 @@ export default defineEventHandler(async (event) => {
 
   const [post] = await db
     .insert(posts)
-    .values(parseResult.data)
+    .values({ photoPath: parseResult.data.photoPaths[0], description: parseResult.data.description })
     .returning()
+
+  const photoEntries = parseResult.data.photoPaths.map((path, index) => ({
+    postId: post.id,
+    photoPath: path.replace(/^\/api\/uploads\//, '/uploads/'),
+    orderIndex: index
+  }))
+
+  await db.insert(postPhotos).values(photoEntries)
 
   return post
 })

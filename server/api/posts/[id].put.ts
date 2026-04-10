@@ -1,13 +1,16 @@
 import { z } from 'zod'
 import { db } from '../../utils/db'
-import { posts } from '../../db/schema'
+import { posts, postPhotos } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 // AGENT: posts-update
 const bodySchema = z.object({
   photoPath: z.string().optional(),
   description: z.string().optional(),
-  createdAt: z.string().optional()
+  createdAt: z.string().optional(),
+  photoPaths: z.array(z.string()).optional(),
+  addPhotos: z.array(z.string()).optional(),
+  removePhotoPaths: z.array(z.string()).optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -32,26 +35,63 @@ export default defineEventHandler(async (event) => {
   }
 
   const updateData: { photoPath?: string; description?: string; createdAt?: Date } = {}
-  if (parseResult.data.photoPath !== undefined) updateData.photoPath = parseResult.data.photoPath
+  if (parseResult.data.photoPath !== undefined) {
+    updateData.photoPath = parseResult.data.photoPath.replace(/^\/api\/uploads\//, '/uploads/')
+  }
   if (parseResult.data.description !== undefined) updateData.description = parseResult.data.description
   if (parseResult.data.createdAt !== undefined) updateData.createdAt = new Date(parseResult.data.createdAt)
-  if (updateData.photoPath) {
-    updateData.photoPath = updateData.photoPath.replace(/^\/api\/uploads\//, '/uploads/')
+
+  if (parseResult.data.photoPaths !== undefined) {
+    const existingPhotos = await db.query.postPhotos.findMany({
+      where: (photos, { eq }) => eq(photos.postId, id)
+    })
+    for (const photo of existingPhotos) {
+      await db.delete(postPhotos).where(eq(postPhotos.id, photo.id))
+    }
+    const newPhotoEntries = parseResult.data.photoPaths.map((path, index) => ({
+      postId: id,
+      photoPath: path.replace(/^\/api\/uploads\//, '/uploads/'),
+      orderIndex: index
+    }))
+    if (newPhotoEntries.length > 0) {
+      await db.insert(postPhotos).values(newPhotoEntries)
+    }
+    if (updateData.photoPath === undefined && newPhotoEntries.length > 0) {
+      updateData.photoPath = newPhotoEntries[0].photoPath
+    }
   }
 
-  if (Object.keys(updateData).length === 0) {
-    throw createError({ statusCode: 400, message: 'No fields to update' })
+  if (parseResult.data.addPhotos !== undefined && parseResult.data.addPhotos.length > 0) {
+    const existingPhotos = await db.query.postPhotos.findMany({
+      where: (photos, { eq }) => eq(photos.postId, id),
+      orderBy: (photos, { desc }) => [desc(photos.orderIndex)]
+    })
+    const maxOrderIndex = existingPhotos.length > 0 ? existingPhotos[0].orderIndex : -1
+    const newPhotoEntries = parseResult.data.addPhotos.map((path, index) => ({
+      postId: id,
+      photoPath: path.replace(/^\/api\/uploads\//, '/uploads/'),
+      orderIndex: maxOrderIndex + 1 + index
+    }))
+    await db.insert(postPhotos).values(newPhotoEntries)
   }
 
-  const [updated] = await db
-    .update(posts)
-    .set(updateData)
-    .where(eq(posts.id, id))
-    .returning()
-
-  if (!updated) {
-    throw createError({ statusCode: 404, message: 'Post not found' })
+  if (parseResult.data.removePhotoPaths !== undefined && parseResult.data.removePhotoPaths.length > 0) {
+    for (const path of parseResult.data.removePhotoPaths) {
+      await db.delete(postPhotos).where(eq(postPhotos.photoPath, path))
+    }
   }
 
-  return updated
+  if (Object.keys(updateData).length > 0) {
+    const [updated] = await db
+      .update(posts)
+      .set(updateData)
+      .where(eq(posts.id, id))
+      .returning()
+
+    if (!updated) {
+      throw createError({ statusCode: 404, message: 'Post not found' })
+    }
+  }
+
+  return { success: true }
 })

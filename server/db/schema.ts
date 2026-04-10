@@ -18,6 +18,14 @@ export const posts = sqliteTable('posts', {
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`)
 })
 
+export const postPhotos = sqliteTable('post_photos', {
+  // AGENT: post-photos-schema
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  photoPath: text('photo_path').notNull(),
+  orderIndex: integer('order_index').notNull().default(0)
+})
+
 export const settings = sqliteTable('settings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   key: text('key').notNull().unique(),

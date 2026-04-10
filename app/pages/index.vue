@@ -6,7 +6,7 @@ const viewMode = ref<'feed' | 'grid'>('feed')
 const selectedPost = ref<any>(null)
 const { isDark, toggle, init } = useTheme()
 const { loggedIn } = useUserSession()
-const config = ref<{ displayName: string; siteName: string }>({ displayName: 'Jolt Posts', siteName: 'Jolt Posts' })
+const config = ref<{ displayName: string; siteName: string; avatarPath: string }>({ displayName: 'Jolt Posts', siteName: 'Jolt Posts', avatarPath: '' })
 
 onMounted(() => {
   init()
@@ -32,7 +32,7 @@ loadPosts()
 loadConfig()
 
 function formatDate(date: Date | number) {
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function openPost(post: any) {
@@ -46,6 +46,24 @@ async function heartPost(post: any) {
 
 function closePost() {
   selectedPost.value = null
+}
+
+function getDisplayPhotos(post: any) {
+  if (post.photos && post.photos.length > 0) {
+    return post.photos.sort((a: any, b: any) => a.orderIndex - b.orderIndex)
+  }
+  return [{ path: post.photoPath, orderIndex: 0 }]
+}
+
+function getThumbnail(post: any) {
+  if (post.photos && post.photos.length > 0) {
+    return post.photos.sort((a: any, b: any) => a.orderIndex - b.orderIndex)[0].path
+  }
+  return post.photoPath
+}
+
+function hasMultiplePhotos(post: any) {
+  return post.photos && post.photos.length > 1
 }
 </script>
 
@@ -111,15 +129,17 @@ function closePost() {
           <article v-for="post in posts" :key="post.id" class="pb-6">
             <div class="flex items-center justify-between px-4 py-4">
               <div class="flex items-center gap-3">
-                <div class="w-9 h-9 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                  {{ config.displayName.charAt(0).toUpperCase() }}
+                <div class="w-9 h-9 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+                  <img v-if="config.avatarPath" :src="config.avatarPath" class="w-full h-full object-cover" />
+                  <span v-else>{{ config.displayName.charAt(0).toUpperCase() }}</span>
                 </div>
                 <span class="font-semibold text-sm">{{ config.displayName }}</span>
               </div>
               <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ formatDate(post.createdAt) }}</span>
             </div>
             <div class="relative group">
-              <img :src="post.photoPath" class="w-full aspect-square object-cover" />
+              <PostPhotoCarousel v-if="hasMultiplePhotos(post)" :photos="getDisplayPhotos(post)" />
+              <img v-else :src="getThumbnail(post)" class="w-full aspect-square object-cover" />
               <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </div>
             <div class="px-4 pt-3">
@@ -139,7 +159,7 @@ function closePost() {
               <p class="text-sm mt-1" :class="isDark ? 'text-gray-300' : 'text-gray-600'">{{ post.description }}</p>
             </div>
           </article>
-<div v-if="posts.length === 0" class="text-center py-20">
+          <div v-if="posts.length === 0" class="text-center py-20">
             <div :class="isDark ? 'w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-gray-800 to-gray-900 rounded-full flex items-center justify-center' : 'w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center'">
               <svg :class="isDark ? 'w-12 h-12 text-gray-600' : 'w-12 h-12 text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -167,7 +187,12 @@ function closePost() {
               :class="isDark ? 'aspect-square bg-gradient-to-br from-gray-800 to-gray-900 cursor-pointer relative group overflow-hidden' : 'aspect-square bg-gradient-to-br from-gray-200 to-gray-300 cursor-pointer relative group overflow-hidden'"
               @click="openPost(post)"
             >
-              <img :src="post.photoPath" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              <img :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              <div v-if="hasMultiplePhotos(post)" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
+                </svg>
+              </div>
               <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <div class="flex items-center gap-4 text-white">
@@ -214,7 +239,10 @@ function closePost() {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-        <img :src="selectedPost.photoPath" class="max-h-[90vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl" />
+        <div class="max-h-[90vh] max-w-[90vw] rounded-2xl shadow-2xl overflow-hidden" @click.stop>
+          <PostPhotoCarousel v-if="hasMultiplePhotos(selectedPost)" :photos="getDisplayPhotos(selectedPost)" />
+          <img v-else :src="getThumbnail(selectedPost)" class="max-h-[90vh] max-w-[90vw] object-contain bg-black" />
+        </div>
       </div>
     </Teleport>
   </div>
