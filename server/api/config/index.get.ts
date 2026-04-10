@@ -14,10 +14,15 @@ export default defineEventHandler(async (event) => {
   const siteNameResult = await db.query.settings.findFirst({
     where: eq(settings.key, 'siteName')
   })
+
+  const avatarPathResult = await db.query.settings.findFirst({
+    where: eq(settings.key, 'avatarPath')
+  })
   
   return {
     displayName: displayNameResult?.value || 'Jolt Posts',
     sitePassword: sitePasswordResult?.value || '',
-    siteName: siteNameResult?.value || 'Jolt Posts'
+    siteName: siteNameResult?.value || 'Jolt Posts',
+    avatarPath: avatarPathResult?.value || ''
   }
 })

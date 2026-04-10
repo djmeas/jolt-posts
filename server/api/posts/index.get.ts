@@ -1,5 +1,5 @@
 import { db } from '../../utils/db'
-import { posts } from '../../db/schema'
+import { posts, postPhotos } from '../../db/schema'
 
 // AGENT: posts-list
 export default defineEventHandler(async (event) => {
@@ -14,12 +14,25 @@ export default defineEventHandler(async (event) => {
   })
 
   const hasMore = allPosts.length > limit
-  const items = hasMore ? allPosts.slice(0, limit) : allPosts
+  const pagePosts = hasMore ? allPosts.slice(0, limit) : allPosts
+
+  const postIds = pagePosts.map(p => p.id)
+  const allPhotos = await db.query.postPhotos.findMany({
+    where: (photos, { inArray }) => inArray(photos.postId, postIds),
+    orderBy: (photos, { asc }) => [asc(photos.orderIndex)]
+  })
+
+  const photosByPostId = allPhotos.reduce((acc, photo) => {
+    if (!acc[photo.postId]) acc[photo.postId] = []
+    acc[photo.postId].push({ path: photo.photoPath.replace(/^\/api\/uploads\//, '/uploads/'), orderIndex: photo.orderIndex })
+    return acc
+  }, {} as Record<number, { path: string; orderIndex: number }[]>)
 
   return {
-    items: items.map(post => ({
+    items: pagePosts.map(post => ({
       ...post,
-      photoPath: post.photoPath.replace(/^\/api\/uploads\//, '/uploads/')
+      photoPath: post.photoPath.replace(/^\/api\/uploads\//, '/uploads/'),
+      photos: photosByPostId[post.id] || []
     })),
     hasMore
   }
