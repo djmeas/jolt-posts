@@ -1,5 +1,4 @@
 import { db } from '../../utils/db'
-import { posts, postPhotos } from '../../db/schema'
 
 // AGENT: posts-list
 export default defineEventHandler(async (event) => {

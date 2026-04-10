@@ -1,9 +1,24 @@
 <script setup lang="ts">
 // AGENT: posts-view
-const posts = ref<any[]>([])
+
+interface Photo {
+  path: string
+  orderIndex: number
+}
+
+interface Post {
+  id: number
+  photoPath: string
+  description: string
+  createdAt: Date | number
+  heartCount?: number
+  photos?: Photo[]
+}
+
+const posts = ref<Post[]>([])
 const hasMore = ref(true)
 const viewMode = ref<'feed' | 'grid'>('feed')
-const selectedPost = ref<any>(null)
+const selectedPost = ref<Post | null>(null)
 const { isDark, toggle, init } = useTheme()
 const { loggedIn } = useUserSession()
 const config = ref<{ displayName: string; siteName: string; avatarPath: string }>({ displayName: 'Jolt Posts', siteName: 'Jolt Posts', avatarPath: '' })
@@ -35,11 +50,11 @@ function formatDate(date: Date | number) {
   return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function openPost(post: any) {
+function openPost(post: Post) {
   selectedPost.value = post
 }
 
-async function heartPost(post: any) {
+async function heartPost(post: Post) {
   await $fetch(`/api/posts/${post.id}`, { method: 'POST' })
   post.heartCount++
 }
@@ -48,21 +63,21 @@ function closePost() {
   selectedPost.value = null
 }
 
-function getDisplayPhotos(post: any) {
+function getDisplayPhotos(post: Post) {
   if (post.photos && post.photos.length > 0) {
-    return post.photos.sort((a: any, b: any) => a.orderIndex - b.orderIndex)
+    return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)
   }
   return [{ path: post.photoPath, orderIndex: 0 }]
 }
 
-function getThumbnail(post: any) {
+function getThumbnail(post: Post) {
   if (post.photos && post.photos.length > 0) {
-    return post.photos.sort((a: any, b: any) => a.orderIndex - b.orderIndex)[0].path
+    return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)[0].path
   }
   return post.photoPath
 }
 
-function hasMultiplePhotos(post: any) {
+function hasMultiplePhotos(post: Post) {
   return post.photos && post.photos.length > 1
 }
 </script>
@@ -76,9 +91,9 @@ function hasMultiplePhotos(post: any) {
         </span>
         <div class="flex items-center gap-4">
           <button
-            @click="toggle"
             class="p-2 rounded-full transition-all duration-300 hover:scale-110"
             :class="isDark ? 'text-gray-400 hover:text-white bg-white/5' : 'text-gray-600 hover:text-gray-900 bg-black/5'"
+            @click="toggle"
           >
             <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -89,20 +104,20 @@ function hasMultiplePhotos(post: any) {
           </button>
           <div class="flex items-center gap-1 rounded-full p-1" :class="isDark ? 'bg-white/5' : 'bg-black/5'">
             <button
-              @click="viewMode = 'feed'"
               class="p-2 rounded-full transition-all duration-300"
               :class="viewMode === 'feed' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'"
               title="Feed view"
+              @click="viewMode = 'feed'"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
             </button>
             <button
-              @click="viewMode = 'grid'"
               class="p-2 rounded-full transition-all duration-300"
               :class="viewMode === 'grid' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' : isDark ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'"
               title="Grid view"
+              @click="viewMode = 'grid'"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <rect width="7" height="7" x="3" y="3" rx="1"/>
@@ -140,15 +155,15 @@ function hasMultiplePhotos(post: any) {
             <div class="relative group">
               <PostPhotoCarousel v-if="hasMultiplePhotos(post)" :photos="getDisplayPhotos(post)" />
               <img v-else :src="getThumbnail(post)" class="w-full aspect-square object-cover" />
-              <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" ></div>
             </div>
             <div class="px-4 pt-3">
               <div class="flex items-center justify-between">
                 <span class="font-semibold text-sm bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">{{ config.displayName }}</span>
                 <button
-                  @click.stop="heartPost(post)"
                   class="flex items-center gap-1 text-sm hover:scale-110 transition-transform duration-200"
                   :class="isDark ? 'text-gray-400 hover:text-red-500' : 'text-gray-500 hover:text-red-600'"
+                  @click.stop="heartPost(post)"
                 >
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -169,8 +184,8 @@ function hasMultiplePhotos(post: any) {
           </div>
           <div v-if="hasMore" class="text-center py-8">
             <button
-              @click="loadMore"
               class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full hover:from-purple-400 hover:to-pink-400 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
+              @click="loadMore"
             >
               Load More
             </button>
@@ -193,7 +208,7 @@ function hasMultiplePhotos(post: any) {
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
                 </svg>
               </div>
-              <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" ></div>
               <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <div class="flex items-center gap-4 text-white">
                   <span class="flex items-center gap-1">
@@ -215,8 +230,8 @@ function hasMultiplePhotos(post: any) {
           </div>
           <div v-if="hasMore" class="text-center py-8">
             <button
-              @click="loadMore"
               class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full hover:from-purple-400 hover:to-pink-400 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
+              @click="loadMore"
             >
               Load More
             </button>
@@ -232,8 +247,8 @@ function hasMultiplePhotos(post: any) {
         @click.self="closePost"
       >
         <button
-          @click="closePost"
           class="absolute top-6 right-6 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/20 hover:scale-110 transition-all duration-200"
+          @click="closePost"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

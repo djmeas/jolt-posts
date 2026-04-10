@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '../../utils/db'
 import { settings } from '../../db/schema'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (_event) => {
   const displayNameResult = await db.query.settings.findFirst({
     where: eq(settings.key, 'displayName')
   })
