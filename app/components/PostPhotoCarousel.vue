@@ -1,11 +1,12 @@
 <script setup lang="ts">
-interface Photo {
+interface Media {
+  type: 'photo' | 'video'
   path: string
-  orderIndex: number
+  orderIndex?: number
 }
 
 const props = defineProps<{
-  photos: Photo[]
+  photos: Media[]
 }>()
 
 const currentIndex = ref(0)
@@ -29,6 +30,7 @@ function next() {
 function onPointerDown(e: PointerEvent) {
   if (props.photos.length <= 1) return
   if (e.target instanceof HTMLElement && e.target.closest('button')) return
+  if (e.target instanceof HTMLElement && e.target.closest('video')) return
   isDragging.value = true
   isTouchSwiping.value = false
   startX.value = e.clientX
@@ -107,12 +109,13 @@ onUnmounted(() => {
       @touchend="onTouchEnd"
     >
       <div
-        v-for="(photo, index) in photos"
-        :key="photo.path"
+        v-for="(media, index) in photos"
+        :key="media.path"
         class="w-full flex-shrink-0"
         :class="index === currentIndex ? 'block' : 'hidden'"
       >
-        <img :src="photo.path" class="w-full aspect-square object-cover" draggable="false" />
+        <img v-if="media.type === 'photo'" :src="media.path" class="w-full aspect-square object-cover" draggable="false" />
+        <video v-else :src="media.path" class="w-full aspect-square object-cover" controls playsinline></video>
       </div>
     </div>
 

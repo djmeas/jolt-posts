@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { posts, postPhotos } from './schema'
+import { posts, postPhotos, postVideos } from './schema'
 
 describe('database schema', () => {
   describe('posts table', () => {
@@ -29,6 +29,14 @@ describe('database schema', () => {
     it('has correct defaults', () => {
       const columns = postPhotosColumns()
       expect(columns.orderIndex.default).toBe(0)
+    })
+  })
+
+  describe('postVideos table', () => {
+    it('has required columns', () => {
+      expect(postVideos.id).toBeDefined()
+      expect(postVideos.postId).toBeDefined()
+      expect(postVideos.videoPath).toBeDefined()
     })
   })
 })

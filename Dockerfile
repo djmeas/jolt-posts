@@ -41,6 +41,7 @@ COPY --from=builder /app/drizzle.config.ts ./
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/server/db/migrations ./server/db/migrations
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/scripts ./scripts
 
 # Copy and make entrypoint executable
 COPY docker-entrypoint.sh /entrypoint.sh

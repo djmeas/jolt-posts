@@ -6,6 +6,10 @@ interface Photo {
   orderIndex: number
 }
 
+interface Video {
+  path: string
+}
+
 interface Post {
   id: number
   photoPath: string
@@ -13,6 +17,7 @@ interface Post {
   createdAt: Date | number
   heartCount?: number
   photos?: Photo[]
+  videoPath?: Video | null
 }
 
 const posts = ref<Post[]>([])
@@ -63,21 +68,30 @@ function closePost() {
   selectedPost.value = null
 }
 
-function getDisplayPhotos(post: Post) {
-  if (post.photos && post.photos.length > 0) {
-    return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)
+function getDisplayMedia(post: Post) {
+  if (post.videoPath) {
+    return [{ type: 'video' as const, path: post.videoPath.path }]
   }
-  return [{ path: post.photoPath, orderIndex: 0 }]
+  if (post.photos && post.photos.length > 0) {
+    return post.photos
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .map(p => ({ type: 'photo' as const, path: p.path }))
+  }
+  return [{ type: 'photo' as const, path: post.photoPath }]
 }
 
 function getThumbnail(post: Post) {
+  if (post.videoPath) {
+    return post.videoPath.path
+  }
   if (post.photos && post.photos.length > 0) {
     return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)[0].path
   }
   return post.photoPath
 }
 
-function hasMultiplePhotos(post: Post) {
+function hasMultipleMedia(post: Post) {
+  if (post.videoPath) return false
   return post.photos && post.photos.length > 1
 }
 </script>
@@ -153,9 +167,9 @@ function hasMultiplePhotos(post: Post) {
               <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ formatDate(post.createdAt) }}</span>
             </div>
             <div class="relative group">
-              <PostPhotoCarousel v-if="hasMultiplePhotos(post)" :photos="getDisplayPhotos(post)" />
+              <PostPhotoCarousel v-if="hasMultipleMedia(post)" :photos="getDisplayMedia(post)" />
+              <video v-else-if="post.videoPath" :src="post.videoPath.path" class="w-full aspect-square object-cover" controls></video>
               <img v-else :src="getThumbnail(post)" class="w-full aspect-square object-cover" />
-              <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" ></div>
             </div>
             <div class="px-4 pt-3">
               <div class="flex items-center justify-between">
@@ -202,10 +216,16 @@ function hasMultiplePhotos(post: Post) {
               :class="isDark ? 'aspect-square bg-gradient-to-br from-gray-800 to-gray-900 cursor-pointer relative group overflow-hidden' : 'aspect-square bg-gradient-to-br from-gray-200 to-gray-300 cursor-pointer relative group overflow-hidden'"
               @click="openPost(post)"
             >
-              <img :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-              <div v-if="hasMultiplePhotos(post)" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+              <video v-if="post.videoPath" :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" muted></video>
+              <img v-else :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              <div v-if="hasMultipleMedia(post)" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
                 <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
+                </svg>
+              </div>
+              <div v-else-if="post.videoPath" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
                 </svg>
               </div>
               <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" ></div>
@@ -255,7 +275,8 @@ function hasMultiplePhotos(post: Post) {
           </svg>
         </button>
         <div class="max-h-[90vh] max-w-[90vw] rounded-2xl shadow-2xl overflow-hidden" @click.stop>
-          <PostPhotoCarousel v-if="hasMultiplePhotos(selectedPost)" :photos="getDisplayPhotos(selectedPost)" />
+          <PostPhotoCarousel v-if="hasMultipleMedia(selectedPost)" :photos="getDisplayMedia(selectedPost)" />
+          <video v-else-if="selectedPost.videoPath" :src="selectedPost.videoPath.path" class="max-h-[90vh] max-w-[90vw] object-contain bg-black" controls></video>
           <img v-else :src="getThumbnail(selectedPost)" class="max-h-[90vh] max-w-[90vw] object-contain bg-black" />
         </div>
       </div>

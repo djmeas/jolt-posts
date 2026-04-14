@@ -1,13 +1,8 @@
-import { z } from 'zod'
 import { db } from '../../utils/db'
-import { posts, postPhotos } from '../../db/schema'
+import { posts, postPhotos, postVideos } from '../../db/schema'
+import { createPostBodySchema, getCreatePostRuleViolation } from './posts.schema'
 
 // AGENT: posts-create
-const bodySchema = z.object({
-  photoPaths: z.array(z.string()).min(1, 'At least one photo is required').max(10, 'Maximum 10 photos allowed'),
-  description: z.string().default('')
-})
-
 export default defineEventHandler(async (event) => {
   const { user } = await getUserSession(event)
   if (!user?.isAdmin) {
@@ -15,7 +10,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event)
-  const parseResult = bodySchema.safeParse(body)
+  const parseResult = createPostBodySchema.safeParse(body)
 
   if (!parseResult.success) {
     throw createError({
@@ -24,18 +19,33 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const [post] = await db
-    .insert(posts)
-    .values({ photoPath: parseResult.data.photoPaths[0], description: parseResult.data.description })
-    .returning()
+  const ruleViolation = getCreatePostRuleViolation(parseResult.data)
+  if (ruleViolation) {
+    throw createError({ statusCode: 400, message: ruleViolation })
+  }
 
-  const photoEntries = parseResult.data.photoPaths.map((path, index) => ({
-    postId: post.id,
-    photoPath: path.replace(/^\/api\/uploads\//, '/uploads/'),
-    orderIndex: index
-  }))
+  let post
+  if (parseResult.data.videoPath) {
+    [post] = await db
+      .insert(posts)
+      .values({ photoPath: parseResult.data.videoPath, description: parseResult.data.description })
+      .returning()
 
-  await db.insert(postPhotos).values(photoEntries)
+    await db.insert(postVideos).values({ postId: post.id, videoPath: parseResult.data.videoPath.replace(/^\/api\/uploads\//, '/uploads/') })
+  } else {
+    [post] = await db
+      .insert(posts)
+      .values({ photoPath: parseResult.data.photoPaths![0], description: parseResult.data.description })
+      .returning()
+
+    const photoEntries = parseResult.data.photoPaths!.map((path, index) => ({
+      postId: post.id,
+      photoPath: path.replace(/^\/api\/uploads\//, '/uploads/'),
+      orderIndex: index
+    }))
+
+    await db.insert(postPhotos).values(photoEntries)
+  }
 
   return post
 })

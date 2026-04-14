@@ -7,6 +7,10 @@ interface Photo {
   orderIndex: number
 }
 
+interface Video {
+  path: string
+}
+
 interface Post {
   id: number
   photoPath: string
@@ -14,6 +18,7 @@ interface Post {
   createdAt: Date | number
   heartCount?: number
   photos?: Photo[]
+  videoPath?: Video | null
 }
 
 const { clear } = useUserSession()
@@ -134,9 +139,9 @@ function handleDrop(e: DragEvent) {
 }
 
 function addFiles(files: File[]) {
-  const imageFiles = files.filter(f => f.type.startsWith('image/'))
+  const mediaFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
   const remaining = 10 - selectedFiles.value.length
-  const toAdd = imageFiles.slice(0, remaining)
+  const toAdd = mediaFiles.slice(0, remaining)
   for (const f of toAdd) {
     selectedFiles.value.push(f)
     previewUrls.value.push(URL.createObjectURL(f))
@@ -182,11 +187,19 @@ async function publishPost() {
     for (const file of selectedFiles.value) {
       fd.append('file', file)
     }
-    const res = await $fetch<{ photoPaths: string[] }>('/api/admin/upload', { method: 'POST', body: fd })
-    await $fetch('/api/posts', {
-      method: 'POST',
-      body: { photoPaths: res.photoPaths, description: description.value }
-    })
+    const res = await $fetch<{ photoPaths: string[]; videoPaths: string[] }>('/api/admin/upload', { method: 'POST', body: fd })
+    
+    if (res.videoPaths && res.videoPaths.length > 0) {
+      await $fetch('/api/posts', {
+        method: 'POST',
+        body: { videoPath: res.videoPaths[0], description: description.value }
+      })
+    } else {
+      await $fetch('/api/posts', {
+        method: 'POST',
+        body: { photoPaths: res.photoPaths, description: description.value }
+      })
+    }
     clearSelection()
     await loadPosts()
   } finally {
@@ -211,9 +224,9 @@ function startEdit(post: Post) {
 function handleEditFileSelect(e: Event) {
   const files = (e.target as HTMLInputElement).files
   if (files) {
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'))
+    const mediaFiles = Array.from(files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
     const remaining = 10 - editSelectedFiles.value.length
-    const toAdd = imageFiles.slice(0, remaining)
+    const toAdd = mediaFiles.slice(0, remaining)
     for (const f of toAdd) {
       editSelectedFiles.value.push(f)
       editPreviewUrls.value.push(URL.createObjectURL(f))
@@ -308,7 +321,7 @@ function getEditPhotos(post: Post) {
 
 <template>
   <div :class="isDark ? 'min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#121212] to-[#0a0a0a] text-white' : 'min-h-screen bg-gradient-to-br from-gray-100 via-white to-gray-100 text-gray-900'">
-    <input ref="editFileInput" type="file" accept="image/*" multiple class="hidden" @change="handleEditFileSelect" />
+    <input ref="editFileInput" type="file" accept="image/*,video/*" multiple class="hidden" @change="handleEditFileSelect" />
     
     <header :class="isDark ? 'sticky top-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/10' : 'sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-black/10'">
       <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -354,7 +367,7 @@ function getEditPhotos(post: Post) {
             @click="fileInput?.click()"
           >
             <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-orange-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" ></div>
-            <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="handleFileSelect" />
+            <input ref="fileInput" type="file" accept="image/*,video/*" multiple class="hidden" @change="handleFileSelect" />
             <div v-if="uploading" class="relative">
               <div class="w-16 h-16 mx-auto border-4 border-white/20 border-t-pink-500 rounded-full animate-spin" ></div>
               <p class="text-gray-400 mt-4">Uploading...</p>
@@ -366,8 +379,8 @@ function getEditPhotos(post: Post) {
                 </svg>
               </div>
               <div>
-                <p :class="isDark ? 'text-gray-300 mb-1' : 'text-gray-700 mb-1'">Drag & drop photos here</p>
-                <p class="text-sm text-gray-500">or click to browse (up to 10 photos)</p>
+                <p :class="isDark ? 'text-gray-300 mb-1' : 'text-gray-700 mb-1'">Drag & drop photos or videos here</p>
+                <p class="text-sm text-gray-500">or click to browse (up to 10 photos or 1 video)</p>
               </div>
               <button
                 class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-full hover:from-purple-500 hover:to-pink-500 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
@@ -386,7 +399,8 @@ function getEditPhotos(post: Post) {
               :key="index"
               class="relative aspect-square rounded-xl overflow-hidden bg-black group"
             >
-              <img :src="url" class="w-full h-full object-cover" />
+              <video v-if="selectedFiles[index]?.type.startsWith('video/')" :src="url" class="w-full h-full object-cover"></video>
+              <img v-else :src="url" class="w-full h-full object-cover" />
               <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
                 <button
                   v-if="index > 0"
@@ -425,7 +439,7 @@ function getEditPhotos(post: Post) {
               :class="isDark ? 'border-white/20 hover:border-white/40 hover:bg-white/5' : 'border-black/20 hover:border-black/40 hover:bg-black/5'"
               @click="fileInput?.click()"
             >
-              <input ref="fileInput" type="file" accept="image/*" multiple class="hidden" @change="handleFileSelect" />
+<input ref="fileInput" type="file" accept="image/*,video/*" multiple class="hidden" @change="handleFileSelect" />
               <svg :class="isDark ? 'w-8 h-8 text-gray-500' : 'w-8 h-8 text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
               </svg>
@@ -561,10 +575,16 @@ function getEditPhotos(post: Post) {
             class="relative group aspect-square"
           >
             <div :class="isDark ? 'absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden' : 'absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 rounded-xl overflow-hidden'">
-              <img :src="post.photos && post.photos.length > 0 ? post.photos.sort((a, b) => a.orderIndex - b.orderIndex)[0].path : post.photoPath" class="w-full h-full object-cover" />
+              <video v-if="post.videoPath" :src="post.videoPath.path" class="w-full h-full object-cover" muted></video>
+              <img v-else :src="post.photos && post.photos.length > 0 ? post.photos.sort((a, b) => a.orderIndex - b.orderIndex)[0].path : post.photoPath" class="w-full h-full object-cover" />
               <div v-if="post.photos && post.photos.length > 1" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
                 <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
+                </svg>
+              </div>
+              <div v-else-if="post.videoPath" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
                 </svg>
               </div>
               <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" ></div>
