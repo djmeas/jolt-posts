@@ -1,14 +1,8 @@
-import { z } from 'zod'
 import { db } from '../../utils/db'
 import { posts, postPhotos, postVideos } from '../../db/schema'
+import { createPostBodySchema, getCreatePostRuleViolation } from './posts.schema'
 
 // AGENT: posts-create
-const bodySchema = z.object({
-  photoPaths: z.array(z.string()).min(1, 'At least one photo is required').max(10, 'Maximum 10 photos allowed').optional(),
-  videoPath: z.string().optional(),
-  description: z.string().default('')
-})
-
 export default defineEventHandler(async (event) => {
   const { user } = await getUserSession(event)
   if (!user?.isAdmin) {
@@ -16,7 +10,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event)
-  const parseResult = bodySchema.safeParse(body)
+  const parseResult = createPostBodySchema.safeParse(body)
 
   if (!parseResult.success) {
     throw createError({
@@ -25,12 +19,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  if (!parseResult.data.photoPaths && !parseResult.data.videoPath) {
-    throw createError({ statusCode: 400, message: 'Either photoPaths or videoPath is required' })
-  }
-
-  if (parseResult.data.photoPaths && parseResult.data.videoPath) {
-    throw createError({ statusCode: 400, message: 'A post cannot have both photos and a video' })
+  const ruleViolation = getCreatePostRuleViolation(parseResult.data)
+  if (ruleViolation) {
+    throw createError({ statusCode: 400, message: ruleViolation })
   }
 
   let post

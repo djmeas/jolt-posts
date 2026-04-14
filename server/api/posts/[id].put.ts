@@ -1,19 +1,9 @@
-import { z } from 'zod'
 import { db } from '../../utils/db'
 import { posts, postPhotos, postVideos } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+import { updatePostBodySchema } from './posts.schema'
 
 // AGENT: posts-update
-const bodySchema = z.object({
-  photoPath: z.string().optional(),
-  description: z.string().optional(),
-  createdAt: z.string().optional(),
-  photoPaths: z.array(z.string()).optional(),
-  addPhotos: z.array(z.string()).optional(),
-  removePhotoPaths: z.array(z.string()).optional(),
-  videoPath: z.string().optional()
-})
-
 export default defineEventHandler(async (event) => {
   const { user } = await getUserSession(event)
   if (!user?.isAdmin) {
@@ -26,7 +16,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event)
-  const parseResult = bodySchema.safeParse(body)
+  const parseResult = updatePostBodySchema.safeParse(body)
 
   if (!parseResult.success) {
     throw createError({

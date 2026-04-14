@@ -1,53 +1,108 @@
 import { describe, it, expect } from 'vitest'
-import { z } from 'zod'
+import {
+  createPostBodySchema,
+  getCreatePostRuleViolation,
+  updatePostBodySchema
+} from './posts.schema'
 
-const bodySchema = z.object({
-  photoPaths: z.array(z.string()).min(1, 'At least one photo is required').max(10, 'Maximum 10 photos allowed'),
-  description: z.string().default('')
-})
-
-describe('posts API schema', () => {
-  describe('bodySchema', () => {
-    it('validates valid post creation body', () => {
-      const validBody = {
-        photoPaths: ['/api/uploads/test.jpg'],
-        description: 'Test post'
-      }
-      const result = bodySchema.safeParse(validBody)
+describe('posts.schema', () => {
+  describe('createPostBodySchema', () => {
+    it('accepts multi-photo body', () => {
+      const result = createPostBodySchema.safeParse({
+        photoPaths: ['/api/uploads/a.jpg', '/api/uploads/b.jpg'],
+        description: 'Hello'
+      })
       expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.description).toBe('Hello')
+        expect(getCreatePostRuleViolation(result.data)).toBeNull()
+      }
     })
 
-    it('allows empty description', () => {
-      const body = { photoPaths: ['/api/uploads/test.jpg'] }
-      const result = bodySchema.safeParse(body)
+    it('accepts video-only body', () => {
+      const result = createPostBodySchema.safeParse({
+        videoPath: '/api/uploads/clip.mp4',
+        description: ''
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(getCreatePostRuleViolation(result.data)).toBeNull()
+      }
+    })
+
+    it('defaults description to empty string', () => {
+      const result = createPostBodySchema.safeParse({ photoPaths: ['/api/uploads/x.jpg'] })
       expect(result.success).toBe(true)
       if (result.success) {
         expect(result.data.description).toBe('')
       }
     })
 
-    it('rejects empty photoPaths array', () => {
-      const body = { photoPaths: [] }
-      const result = bodySchema.safeParse(body)
+    it('rejects empty photoPaths when field is present', () => {
+      const result = createPostBodySchema.safeParse({ photoPaths: [] })
       expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.issues[0].message).toBe('At least one photo is required')
-      }
     })
 
     it('rejects more than 10 photos', () => {
-      const body = { photoPaths: Array(11).fill('/api/uploads/test.jpg') }
-      const result = bodySchema.safeParse(body)
+      const result = createPostBodySchema.safeParse({
+        photoPaths: Array(11).fill('/api/uploads/x.jpg')
+      })
       expect(result.success).toBe(false)
-      if (!result.success) {
-        expect(result.error.issues[0].message).toBe('Maximum 10 photos allowed')
+    })
+
+    it('parses body with neither photos nor video (rule enforced separately)', () => {
+      const result = createPostBodySchema.safeParse({ description: 'x' })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(getCreatePostRuleViolation(result.data)).toBe(
+          'Either photoPaths or videoPath is required'
+        )
       }
     })
 
-    it('rejects missing photoPaths', () => {
-      const body = { description: 'Test' }
-      const result = bodySchema.safeParse(body)
-      expect(result.success).toBe(false)
+    it('rejects both photoPaths and videoPath via rule helper', () => {
+      const result = createPostBodySchema.safeParse({
+        photoPaths: ['/api/uploads/a.jpg'],
+        videoPath: '/api/uploads/v.mp4'
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(getCreatePostRuleViolation(result.data)).toBe(
+          'A post cannot have both photos and a video'
+        )
+      }
+    })
+  })
+
+  describe('updatePostBodySchema', () => {
+    it('accepts empty object', () => {
+      const result = updatePostBodySchema.safeParse({})
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts videoPath only', () => {
+      const result = updatePostBodySchema.safeParse({
+        videoPath: '/uploads/reel.mp4'
+      })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.videoPath).toBe('/uploads/reel.mp4')
+      }
+    })
+
+    it('accepts photoPaths replacement', () => {
+      const result = updatePostBodySchema.safeParse({
+        photoPaths: ['/uploads/1.jpg', '/uploads/2.jpg']
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts addPhotos and removePhotoPaths', () => {
+      const result = updatePostBodySchema.safeParse({
+        addPhotos: ['/uploads/new.jpg'],
+        removePhotoPaths: ['/uploads/old.jpg']
+      })
+      expect(result.success).toBe(true)
     })
   })
 })
