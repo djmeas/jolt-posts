@@ -1,6 +1,6 @@
 # Jolt Posts - Nuxt 4 Photo App
 
-A full-stack Nuxt 4 application for managing and displaying photo posts.
+A full-stack Nuxt 4 application for managing and displaying photo and video posts.
 
 ## Project Structure
 
@@ -9,12 +9,11 @@ A full-stack Nuxt 4 application for managing and displaying photo posts.
 │   ├── app.vue              # App entry
 │   ├── pages/               # File-based routing
 │   │   ├── index.vue        # Public feed/grid view
-│   │   ├── admin/           # Admin section (auth required)
-│   │   │   ├── index.vue    # Create/delete posts
-│   │   │   └── login.vue    # Admin login
-│   │   ├── login.vue        # User login
-│   │   ├── register.vue     # User registration
-│   │   └── dashboard.vue    # User dashboard
+│   │   └── admin/           # Admin section (auth required)
+│   │       ├── index.vue    # Create/delete posts
+│   │       └── login.vue    # Admin login
+│   ├── components/          # Vue components
+│   │   └── PostPhotoCarousel.vue  # Photo/video carousel
 │   ├── composables/         # Vue composables (auto-imported)
 │   │   └── useTheme.ts      # Dark/light mode toggle
 │   └── middleware/          # Route middleware (auth, guest)
@@ -23,20 +22,23 @@ A full-stack Nuxt 4 application for managing and displaying photo posts.
 │   │   ├── auth/            # Auth endpoints (login, register, logout)
 │   │   ├── admin/           # Admin endpoints (login, upload)
 │   │   ├── posts/           # CRUD for posts
-│   │   │   ├── index.get.ts     # GET /api/posts - List all posts
-│   │   │   ├── index.post.ts    # POST /api/posts - Create post
-│   │   │   └── [id].delete.ts   # DELETE /api/posts/:id - Delete post
 │   │   └── uploads/         # Serve uploaded files
 │   ├── db/
-│   │   ├── schema.ts        # Drizzle schema (users, posts tables)
+│   │   ├── schema.ts        # Drizzle schema (users, posts, postPhotos, postVideos tables)
 │   │   └── migrations/      # Generated migrations
 │   └── utils/
 │       └── db.ts            # Database instance
+├── scripts/
+│   └── init-admin.mjs       # Initialize admin user from NUXT_ADMIN_PASSWORD
 ├── public/
-│   └── uploads/             # Uploaded images (served statically)
+│   └── uploads/             # Uploaded images and videos (served statically)
 ├── nuxt.config.ts
 ├── drizzle.config.ts
-├── .gitignore
+├── docker-entrypoint.sh     # Docker startup script (runs migrations + init-admin)
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+├── .env.docker
 └── package.json
 ```
 
@@ -54,8 +56,8 @@ A full-stack Nuxt 4 application for managing and displaying photo posts.
 ```bash
 npm install
 cp .env.example .env  # Set NUXT_SESSION_PASSWORD and NUXT_ADMIN_PASSWORD
-npm run db:migrate
-npm run dev
+npm run db:migrate    # Only needed once (or after schema changes)
+npm run dev           # Runs db:prepare first, then init-admin, then starts dev server
 ```
 
 ### Docker
@@ -69,14 +71,14 @@ App will be available at `http://localhost:7733`
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server |
+| `npm run dev` | Start development server (runs init-admin first via predev hook) |
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
 | `npm run db:generate` | Generate migrations from schema changes |
 | `npm run db:migrate` | Apply migrations to database |
 | `npm run lint` | Run ESLint |
 | `npm run lint:fix` | Auto-fix ESLint issues |
-| `npm run db:migrate` | Apply migrations to database |
+| `npm run init-admin` | Manually re-initialize the admin user |
 
 ## Environment Variables
 
@@ -102,11 +104,33 @@ users = {
 ```ts
 posts = {
   id: integer (autoIncrement, primaryKey)
-  photoPath: text
+  photoPath: text  # Cover/thumbnail path (photo or video)
   description: text (default: '')
+  heartCount: integer (default: 0)
   createdAt: timestamp
 }
 ```
+
+### PostPhotos Table (additional photos for a post)
+```ts
+postPhotos = {
+  id: integer (autoIncrement, primaryKey)
+  postId: integer (references posts.id, onDelete: cascade)
+  photoPath: text
+  orderIndex: integer (default: 0)
+}
+```
+
+### PostVideos Table (single video per post)
+```ts
+postVideos = {
+  id: integer (autoIncrement, primaryKey)
+  postId: integer (references posts.id, onDelete: cascade)
+  videoPath: text
+}
+```
+
+**Note**: A post can have either multiple photos OR a single video, not both.
 
 ## Key Patterns
 
@@ -129,18 +153,26 @@ const { loggedIn, user } = await getUserSession(event)
 Nuxt uses file-based routing for API routes:
 - `server/api/posts/index.get.ts` → `GET /api/posts`
 - `server/api/posts/index.post.ts` → `POST /api/posts`
+- `server/api/posts/[id].put.ts` → `PUT /api/posts/:id`
 - `server/api/posts/[id].delete.ts` → `DELETE /api/posts/:id`
 - `server/api/admin/upload.post.ts` → `POST /api/admin/upload`
 
-### File Upload
+### File Upload (images AND videos)
 ```ts
 const formData = await readMultipartFormData(event)
 if (!formData || formData.length === 0) {
   throw createError({ statusCode: 400, message: 'No file uploaded' })
 }
-const file = formData[0]  // First file
-if (!file.type?.startsWith('image/')) {
-  throw createError({ statusCode: 400, message: 'Only image files are allowed' })
+
+// Accept images OR videos
+for (const file of formData) {
+  if (file.type?.startsWith('image/')) {
+    // handle image
+  } else if (file.type?.startsWith('video/')) {
+    // handle video
+  } else {
+    throw createError({ statusCode: 400, message: 'Only image or video files are allowed' })
+  }
 }
 ```
 
@@ -169,15 +201,16 @@ toggle()
 ### Public
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/posts` | GET | List all posts |
+| `/api/posts` | GET | List all posts with photos or video |
 
 ### Admin (requires isAdmin session)
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/admin/login` | POST | Login with `NUXT_ADMIN_PASSWORD` |
-| `/api/admin/upload` | POST | Upload image, returns `{ photoPath }` |
-| `/api/posts` | POST | Create post `{ photoPath, description }` |
-| `/api/posts/:id` | DELETE | Delete a post |
+| `/api/admin/upload` | POST | Upload images or videos, returns `{ photoPaths, videoPaths }` |
+| `/api/posts` | POST | Create post with `{ photoPaths }` OR `{ videoPath }`, plus `description` |
+| `/api/posts/:id` | PUT | Update post (description, date, photos, or video) |
+| `/api/posts/:id` | DELETE | Delete post and all associated media files |
 
 ### User Auth
 | Endpoint | Method | Description |
@@ -210,13 +243,15 @@ RUN cp -r .output/public .output/server/chunks/public
 | Volume | Host Path | What Persists |
 |--------|-----------|---------------|
 | `app-data` | `/app/.data` | SQLite database (`*.db`) |
-| `uploads-data` | `/app/public/uploads` | User-uploaded images |
+| `uploads-data` | `/app/public/uploads` | User-uploaded images and videos |
 
-The entrypoint script (`docker-entrypoint.sh`) ensures directories exist before starting:
+The entrypoint script (`docker-entrypoint.sh`) runs on every container start:
 ```bash
 mkdir -p .data
 mkdir -p public/uploads
-npx drizzle-kit migrate  # Run migrations on container start
+npx drizzle-kit migrate    # Run migrations
+node scripts/init-admin.mjs  # Re-initialize admin user from NUXT_ADMIN_PASSWORD
+exec node .output/server/index.mjs
 ```
 
 ### Native Modules
@@ -296,13 +331,14 @@ export default defineEventHandler(async (event) => {
 5. **Changes not taking effect**: Run `npm run db:generate && npm run db:migrate` after schema changes
 6. **Static assets 404 in Docker**: Nitro looks in `server/chunks/public/` at runtime - ensure Dockerfile copies `.output/public` there
 7. **Upload directory missing in Docker**: The entrypoint script creates `public/uploads` and `.data` directories on startup
+8. **Admin login wrong password**: Ensure `NUXT_ADMIN_PASSWORD` is set. Run `npm run init-admin` to re-sync the admin user.
 
 ## Debugging
 
 ### Check session data:
 ```ts
 const { user } = await getUserSession(event)
-console.log('User:', user)
+console.warn('User:', user)
 ```
 
 ### Verify database state:
@@ -314,9 +350,9 @@ const allPosts = await db.select().from(posts)
 
 ### File upload debugging:
 ```ts
-console.log('FormData:', formData)
-console.log('File:', formData[0])
-console.log('File type:', formData[0].type)
+console.warn('FormData:', formData)
+console.warn('File:', formData[0])
+console.warn('File type:', formData[0].type)
 ```
 
 ## Agent Targeting
@@ -332,6 +368,8 @@ Use `// AGENT:` comments to tag code sections for agentic targeting. This allows
 | Tag | Location | Purpose |
 |-----|----------|---------|
 | `posts-schema` | `server/db/schema.ts` | Posts table definition |
+| `post-photos-schema` | `server/db/schema.ts` | PostPhotos table definition |
+| `post-videos-schema` | `server/db/schema.ts` | PostVideos table definition |
 | `posts-list` | `server/api/posts/index.get.ts` | GET /api/posts endpoint |
 | `posts-create` | `server/api/posts/index.post.ts` | POST /api/posts endpoint |
 | `posts-update` | `server/api/posts/[id].put.ts` | PUT /api/posts/:id endpoint |
