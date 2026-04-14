@@ -21,17 +21,23 @@ export default defineEventHandler(async (event) => {
   await mkdir(uploadsDir, { recursive: true })
 
   const photoPaths: string[] = []
+  const videoPaths: string[] = []
 
   for (const file of formData) {
-    if (!file.type?.startsWith('image/')) {
-      throw createError({ statusCode: 400, message: 'Only image files are allowed' })
+    if (file.type?.startsWith('image/')) {
+      const ext = extname(file.filename || '.jpg') || '.jpg'
+      const filename = `${randomBytes(16).toString('hex')}${ext}`
+      await writeFile(join(uploadsDir, filename), file.data)
+      photoPaths.push(`/uploads/${filename}`.replace(/^\/api\/uploads\//, '/uploads/'))
+    } else if (file.type?.startsWith('video/')) {
+      const ext = extname(file.filename || '.mp4') || '.mp4'
+      const filename = `${randomBytes(16).toString('hex')}${ext}`
+      await writeFile(join(uploadsDir, filename), file.data)
+      videoPaths.push(`/uploads/${filename}`.replace(/^\/api\/uploads\//, '/uploads/'))
+    } else {
+      throw createError({ statusCode: 400, message: 'Only image or video files are allowed' })
     }
-
-    const ext = extname(file.filename || '.jpg') || '.jpg'
-    const filename = `${randomBytes(16).toString('hex')}${ext}`
-    await writeFile(join(uploadsDir, filename), file.data)
-    photoPaths.push(`/uploads/${filename}`.replace(/^\/api\/uploads\//, '/uploads/'))
   }
 
-  return { photoPaths }
+  return { photoPaths, videoPaths }
 })

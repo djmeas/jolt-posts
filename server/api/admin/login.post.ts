@@ -40,32 +40,27 @@ export default defineEventHandler(async (event) => {
 
   const { password } = parseResult.data
 
-  let admin = await db.query.users.findFirst({
-    where: eq(users.email, 'djmeas@gmail.com')
+  const admin = await db.query.users.findFirst({
+    where: eq(users.isAdmin, true)
   })
 
   if (!admin) {
-    const passwordHash = await hashPassword(password)
-    const [user] = await db
-      .insert(users)
-      .values({
-        email: 'djmeas@gmail.com',
-        passwordHash,
-        isAdmin: true
-      })
-      .returning()
-    admin = user
-  } else {
-    const passwordValid = await verifyPassword(admin.passwordHash, password)
-    if (!passwordValid) {
-      recordFailedAttempt(ip)
-      const newRemaining = checkRateLimit(ip).remaining
-      setResponseHeaders(event, { 'X-RateLimit-Remaining': String(newRemaining) })
-      throw createError({
-        statusCode: 401,
-        message: 'Invalid password'
-      })
-    }
+    throw createError({
+      statusCode: 401,
+      message: 'No admin user configured'
+    })
+  }
+
+  const passwordValid = await verifyPassword(admin.passwordHash, password)
+
+  if (!passwordValid) {
+    recordFailedAttempt(ip)
+    const newRemaining = checkRateLimit(ip).remaining
+    setResponseHeaders(event, { 'X-RateLimit-Remaining': String(newRemaining) })
+    throw createError({
+      statusCode: 401,
+      message: 'Invalid password'
+    })
   }
 
   clearAttempts(ip)

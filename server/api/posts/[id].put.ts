@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { db } from '../../utils/db'
-import { posts, postPhotos } from '../../db/schema'
+import { posts, postPhotos, postVideos } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 // AGENT: posts-update
@@ -10,7 +10,8 @@ const bodySchema = z.object({
   createdAt: z.string().optional(),
   photoPaths: z.array(z.string()).optional(),
   addPhotos: z.array(z.string()).optional(),
-  removePhotoPaths: z.array(z.string()).optional()
+  removePhotoPaths: z.array(z.string()).optional(),
+  videoPath: z.string().optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -34,6 +35,25 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  if (parseResult.data.videoPath !== undefined) {
+    const existingVideos = await db.query.postVideos.findMany({
+      where: (videos, { eq }) => eq(videos.postId, id)
+    })
+    for (const video of existingVideos) {
+      await db.delete(postVideos).where(eq(postVideos.id, video.id))
+    }
+    await db.insert(postVideos).values({ postId: id, videoPath: parseResult.data.videoPath.replace(/^\/api\/uploads\//, '/uploads/') })
+    const [updated] = await db
+      .update(posts)
+      .set({ photoPath: parseResult.data.videoPath.replace(/^\/api\/uploads\//, '/uploads/') })
+      .where(eq(posts.id, id))
+      .returning()
+    if (!updated) {
+      throw createError({ statusCode: 404, message: 'Post not found' })
+    }
+    return { success: true }
+  }
+
   const updateData: { photoPath?: string; description?: string; createdAt?: Date } = {}
   if (parseResult.data.photoPath !== undefined) {
     updateData.photoPath = parseResult.data.photoPath.replace(/^\/api\/uploads\//, '/uploads/')
@@ -42,6 +62,13 @@ export default defineEventHandler(async (event) => {
   if (parseResult.data.createdAt !== undefined) updateData.createdAt = new Date(parseResult.data.createdAt)
 
   if (parseResult.data.photoPaths !== undefined) {
+    const existingVideos = await db.query.postVideos.findMany({
+      where: (videos, { eq }) => eq(videos.postId, id)
+    })
+    for (const video of existingVideos) {
+      await db.delete(postVideos).where(eq(postVideos.id, video.id))
+    }
+
     const existingPhotos = await db.query.postPhotos.findMany({
       where: (photos, { eq }) => eq(photos.postId, id)
     })
@@ -62,6 +89,12 @@ export default defineEventHandler(async (event) => {
   }
 
   if (parseResult.data.addPhotos !== undefined && parseResult.data.addPhotos.length > 0) {
+    const existingVideos = await db.query.postVideos.findMany({
+      where: (videos, { eq }) => eq(videos.postId, id)
+    })
+    if (existingVideos.length > 0) {
+      throw createError({ statusCode: 400, message: 'Cannot add photos to a video post' })
+    }
     const existingPhotos = await db.query.postPhotos.findMany({
       where: (photos, { eq }) => eq(photos.postId, id),
       orderBy: (photos, { desc }) => [desc(photos.orderIndex)]

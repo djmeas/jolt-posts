@@ -26,6 +26,13 @@ export const postPhotos = sqliteTable('post_photos', {
   orderIndex: integer('order_index').notNull().default(0)
 })
 
+export const postVideos = sqliteTable('post_videos', {
+  // AGENT: post-videos-schema
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  videoPath: text('video_path').notNull()
+})
+
 export const settings = sqliteTable('settings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   key: text('key').notNull().unique(),

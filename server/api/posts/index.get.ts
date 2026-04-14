@@ -21,17 +21,27 @@ export default defineEventHandler(async (event) => {
     orderBy: (photos, { asc }) => [asc(photos.orderIndex)]
   })
 
+  const allVideos = await db.query.postVideos.findMany({
+    where: (videos, { inArray }) => inArray(videos.postId, postIds)
+  })
+
   const photosByPostId = allPhotos.reduce((acc, photo) => {
     if (!acc[photo.postId]) acc[photo.postId] = []
     acc[photo.postId].push({ path: photo.photoPath.replace(/^\/api\/uploads\//, '/uploads/'), orderIndex: photo.orderIndex })
     return acc
   }, {} as Record<number, { path: string; orderIndex: number }[]>)
 
+  const videoByPostId = allVideos.reduce((acc, video) => {
+    if (!acc[video.postId]) acc[video.postId] = { path: video.videoPath.replace(/^\/api\/uploads\//, '/uploads/') }
+    return acc
+  }, {} as Record<number, { path: string }>)
+
   return {
     items: pagePosts.map(post => ({
       ...post,
       photoPath: post.photoPath.replace(/^\/api\/uploads\//, '/uploads/'),
-      photos: photosByPostId[post.id] || []
+      photos: photosByPostId[post.id] || [],
+      videoPath: videoByPostId[post.id] || null
     })),
     hasMore
   }
