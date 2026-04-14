@@ -216,7 +216,8 @@ function hasMultipleMedia(post: Post) {
               :class="isDark ? 'aspect-square bg-gradient-to-br from-gray-800 to-gray-900 cursor-pointer relative group overflow-hidden' : 'aspect-square bg-gradient-to-br from-gray-200 to-gray-300 cursor-pointer relative group overflow-hidden'"
               @click="openPost(post)"
             >
-              <img :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+              <video v-if="post.videoPath" :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" muted></video>
+              <img v-else :src="getThumbnail(post)" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
               <div v-if="hasMultipleMedia(post)" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
                 <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
