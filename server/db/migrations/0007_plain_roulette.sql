@@ -1,0 +1,1 @@
+ALTER TABLE `comments` ADD `is_approved` integer DEFAULT true NOT NULL;

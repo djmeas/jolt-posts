@@ -26,7 +26,7 @@ const viewMode = ref<'feed' | 'grid'>('feed')
 const selectedPost = ref<Post | null>(null)
 const { isDark, toggle, init } = useTheme()
 const { loggedIn } = useUserSession()
-const config = ref<{ displayName: string; siteName: string; avatarPath: string }>({ displayName: 'Jolt Posts', siteName: 'Jolt Posts', avatarPath: '' })
+const config = ref<{ displayName: string; siteName: string; avatarPath: string; commentsEnabled: boolean; commentsModerated: boolean }>({ displayName: 'Jolt Posts', siteName: 'Jolt Posts', avatarPath: '', commentsEnabled: false, commentsModerated: false })
 
 onMounted(() => {
   init()
@@ -52,7 +52,7 @@ loadPosts()
 loadConfig()
 
 function formatDate(date: Date | number) {
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
 function openPost(post: Post) {
@@ -186,6 +186,9 @@ function hasMultipleMedia(post: Post) {
                 </button>
               </div>
               <p class="text-sm mt-1" :class="isDark ? 'text-gray-300' : 'text-gray-600'">{{ post.description }}</p>
+            </div>
+            <div class="px-4 pt-3 pb-4">
+              <CommentSection :post-id="post.id" :is-dark="isDark" :comments-enabled="config.commentsEnabled" :comments-moderated="config.commentsModerated" />
             </div>
           </article>
           <div v-if="posts.length === 0" class="text-center py-20">

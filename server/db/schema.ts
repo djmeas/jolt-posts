@@ -33,6 +33,16 @@ export const postVideos = sqliteTable('post_videos', {
   videoPath: text('video_path').notNull()
 })
 
+export const comments = sqliteTable('comments', {
+  // AGENT: comments-schema
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  authorName: text('author_name').notNull(),
+  content: text('content').notNull(),
+  isApproved: integer('is_approved', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`)
+})
+
 export const settings = sqliteTable('settings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   key: text('key').notNull().unique(),

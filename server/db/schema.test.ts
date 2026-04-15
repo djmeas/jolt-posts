@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { posts, postPhotos, postVideos } from './schema'
+import { posts, postPhotos, postVideos, comments } from './schema'
 
 describe('database schema', () => {
   describe('posts table', () => {
@@ -39,6 +39,22 @@ describe('database schema', () => {
       expect(postVideos.videoPath).toBeDefined()
     })
   })
+
+  describe('comments table', () => {
+    it('has required columns', () => {
+      expect(comments.id).toBeDefined()
+      expect(comments.postId).toBeDefined()
+      expect(comments.authorName).toBeDefined()
+      expect(comments.content).toBeDefined()
+      expect(comments.isApproved).toBeDefined()
+      expect(comments.createdAt).toBeDefined()
+    })
+
+    it('has correct defaults', () => {
+      const columns = commentsColumns()
+      expect(columns.isApproved.default).toBe(true)
+    })
+  })
 })
 
 function postsColumns() {
@@ -57,5 +73,16 @@ function postPhotosColumns() {
     postId: postPhotos.postId,
     photoPath: postPhotos.photoPath,
     orderIndex: postPhotos.orderIndex
+  }
+}
+
+function commentsColumns() {
+  return {
+    id: comments.id,
+    postId: comments.postId,
+    authorName: comments.authorName,
+    content: comments.content,
+    isApproved: comments.isApproved,
+    createdAt: comments.createdAt
   }
 }
