@@ -18,11 +18,21 @@ export default defineEventHandler(async (_event) => {
   const avatarPathResult = await db.query.settings.findFirst({
     where: eq(settings.key, 'avatarPath')
   })
+
+  const commentsEnabledResult = await db.query.settings.findFirst({
+    where: eq(settings.key, 'commentsEnabled')
+  })
+
+  const commentsModeratedResult = await db.query.settings.findFirst({
+    where: eq(settings.key, 'commentsModerated')
+  })
   
   return {
     displayName: displayNameResult?.value || 'Jolt Posts',
     sitePassword: sitePasswordResult?.value || '',
     siteName: siteNameResult?.value || 'Jolt Posts',
-    avatarPath: avatarPathResult?.value || ''
+    avatarPath: avatarPathResult?.value || '',
+    commentsEnabled: commentsEnabledResult?.value === 'true',
+    commentsModerated: commentsModeratedResult?.value === 'true'
   }
 })

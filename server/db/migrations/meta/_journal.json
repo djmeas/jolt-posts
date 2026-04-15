@@ -43,6 +43,20 @@
       "when": 1776127748968,
       "tag": "0005_careless_charles_xavier",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776198039826,
+      "tag": "0006_curvy_mephisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776202357154,
+      "tag": "0007_plain_roulette",
+      "breakpoints": true
     }
   ]
 }

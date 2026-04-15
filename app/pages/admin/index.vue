@@ -23,6 +23,7 @@ interface Post {
 
 const { clear } = useUserSession()
 const { isDark, toggle, init } = useTheme()
+const { confirm } = useDialog()
 const posts = ref<Post[]>([])
 const hasMore = ref(true)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -46,14 +47,18 @@ const sitePassword = ref('')
 const siteName = ref('')
 const avatarPath = ref('')
 const avatarFileInput = ref<HTMLInputElement | null>(null)
-const savingDisplayName = ref(false)
-const savingSitePassword = ref(false)
-const savingSiteName = ref(false)
 const savingAvatar = ref(false)
+const commentsEnabled = ref(false)
+const commentsModerated = ref(false)
+const savingSettings = ref(false)
+const comments = ref<Array<{id: number; postId: number; authorName: string; content: string; isApproved: boolean; createdAt: Date | number; postDescription?: string; postPhotoPath?: string; postVideoPath?: string}>>([])
+const hasMoreComments = ref(true)
+const activeTab = ref<'posts' | 'comments' | 'settings'>('posts')
 
 onMounted(() => {
   init()
   loadConfig()
+  loadComments()
 })
 
 async function loadPosts() {
@@ -69,47 +74,25 @@ async function loadMorePosts() {
 }
 
 async function loadConfig() {
-  const config = await $fetch<{ displayName: string; sitePassword?: string; siteName: string; avatarPath: string }>('/api/config')
+  const config = await $fetch<{ displayName: string; sitePassword?: string; siteName: string; avatarPath: string; commentsEnabled: boolean; commentsModerated: boolean }>('/api/config')
   displayName.value = config.displayName
   sitePassword.value = config.sitePassword || ''
   siteName.value = config.siteName
   avatarPath.value = config.avatarPath || ''
+  commentsEnabled.value = config.commentsEnabled
+  commentsModerated.value = config.commentsModerated
 }
 
-async function saveDisplayName() {
-  savingDisplayName.value = true
-  try {
-    await $fetch('/api/config', {
-      method: 'PUT',
-      body: { key: 'displayName', value: displayName.value }
-    })
-  } finally {
-    savingDisplayName.value = false
-  }
+async function loadComments() {
+  const data = await $fetch<{ items: Array<{id: number; postId: number; authorName: string; content: string; isApproved: boolean; createdAt: Date | number; postDescription?: string; postPhotoPath?: string}>; hasMore: boolean }>('/api/admin/comments?limit=20&offset=0')
+  comments.value = data.items
+  hasMoreComments.value = data.hasMore
 }
 
-async function saveSitePassword() {
-  savingSitePassword.value = true
-  try {
-    await $fetch('/api/config', {
-      method: 'PUT',
-      body: { key: 'sitePassword', value: sitePassword.value }
-    })
-  } finally {
-    savingSitePassword.value = false
-  }
-}
-
-async function saveSiteName() {
-  savingSiteName.value = true
-  try {
-    await $fetch('/api/config', {
-      method: 'PUT',
-      body: { key: 'siteName', value: siteName.value }
-    })
-  } finally {
-    savingSiteName.value = false
-  }
+async function loadMoreComments() {
+  const data = await $fetch<{ items: Array<{id: number; postId: number; authorName: string; content: string; isApproved: boolean; createdAt: Date | number; postDescription?: string; postPhotoPath?: string}>; hasMore: boolean }>(`/api/admin/comments?limit=20&offset=${comments.value.length}`)
+  comments.value.push(...data.items)
+  hasMoreComments.value = data.hasMore
 }
 
 async function saveAvatar() {
@@ -124,6 +107,37 @@ async function saveAvatar() {
   } finally {
     savingAvatar.value = false
   }
+}
+
+async function saveSettings() {
+  savingSettings.value = true
+  const toast = useToast()
+  try {
+    await Promise.all([
+      $fetch('/api/config', { method: 'PUT', body: { key: 'displayName', value: displayName.value } }),
+      $fetch('/api/config', { method: 'PUT', body: { key: 'sitePassword', value: sitePassword.value } }),
+      $fetch('/api/config', { method: 'PUT', body: { key: 'siteName', value: siteName.value } }),
+      $fetch('/api/config', { method: 'PUT', body: { key: 'commentsEnabled', value: commentsEnabled.value ? 'true' : 'false' } }),
+      $fetch('/api/config', { method: 'PUT', body: { key: 'commentsModerated', value: commentsModerated.value ? 'true' : 'false' } })
+    ])
+    toast.show('Settings saved')
+  } catch {
+    toast.show('Failed to save settings', 'error')
+  } finally {
+    savingSettings.value = false
+  }
+}
+
+async function approveComment(id: number) {
+  await $fetch(`/api/admin/comments/${id}`, { method: 'PUT', body: { isApproved: true } })
+  const comment = comments.value.find(c => c.id === id)
+  if (comment) comment.isApproved = true
+}
+
+async function deleteComment(id: number) {
+  if (!await confirm({ message: 'Delete this comment?' })) return
+  await $fetch(`/api/admin/comments/${id}`, { method: 'DELETE' })
+  comments.value = comments.value.filter(c => c.id !== id)
 }
 loadPosts()
 
@@ -299,7 +313,7 @@ async function saveEdit() {
 }
 
 async function deletePost(id: number) {
-  if (!confirm('Delete this post?')) return
+  if (!await confirm({ message: 'Delete this post?', danger: true })) return
   await $fetch(`/api/posts/${id}`, { method: 'DELETE' })
   activeMenuPost.value = null
   await loadPosts()
@@ -316,6 +330,21 @@ function getEditPhotos(post: Post) {
     return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)
   }
   return [{ path: post.photoPath, orderIndex: 0 }]
+}
+
+function getThumbnail(post: Post) {
+  if (post.videoPath) {
+    return post.videoPath.path
+  }
+  if (post.photos && post.photos.length > 0) {
+    return post.photos.sort((a, b) => a.orderIndex - b.orderIndex)[0].path
+  }
+  return post.photoPath
+}
+
+function hasMultipleMedia(post: Post) {
+  if (post.videoPath) return false
+  return post.photos && post.photos.length > 1
 }
 </script>
 
@@ -348,8 +377,31 @@ function getEditPhotos(post: Post) {
     </header>
 
     <main class="max-w-5xl mx-auto px-6 py-10">
-      <div class="mb-12">
-        <h2 class="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">Create Post</h2>
+      <div class="mb-8">
+        <div class="flex items-center gap-1 p-1 rounded-xl" :class="isDark ? 'bg-white/5' : 'bg-black/5'">
+          <button
+            v-for="tab in ['posts', 'comments', 'settings'] as const"
+            :key="tab"
+            class="flex-1 py-3 px-4 rounded-lg text-sm font-semibold transition-all duration-300"
+            :class="activeTab === tab
+              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+              : isDark
+                ? 'text-gray-400 hover:text-white'
+                : 'text-gray-600 hover:text-gray-900'"
+            @click="activeTab = tab"
+          >
+            <span class="capitalize">{{ tab }}</span>
+            <span v-if="tab === 'comments' && commentsEnabled && commentsModerated && comments.filter(c => !c.isApproved).length > 0" class="ml-2 px-2 py-0.5 bg-yellow-500 text-yellow-900 text-xs rounded-full">
+              {{ comments.filter(c => !c.isApproved).length }}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'posts'">
+        <div class="mb-12">
+          <h2 class="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">Create Post</h2>
+        </div>
         
         <div v-if="selectedFiles.length === 0">
           <div
@@ -476,9 +528,71 @@ function getEditPhotos(post: Post) {
             </button>
           </div>
         </div>
+
+        <div class="mt-12">
+          <h2 class="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">Posts</h2>
+          
+          <div v-if="posts.length === 0" class="text-center py-12" :class="isDark ? 'bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl' : 'bg-gradient-to-br from-gray-100 to-white border border-black/10 rounded-2xl'">
+            <p :class="isDark ? 'text-gray-400' : 'text-gray-500'">No posts yet</p>
+          </div>
+          
+          <div v-else class="grid grid-cols-3 gap-0.5 rounded-2xl overflow-hidden">
+            <div
+              v-for="post in posts"
+              :key="post.id"
+              class="relative aspect-square bg-black cursor-pointer group"
+              @click="toggleMenu(post.id)"
+            >
+              <video v-if="post.videoPath" :src="post.videoPath.path" class="w-full h-full object-cover" muted></video>
+              <img v-else :src="getThumbnail(post)" class="w-full h-full object-cover" />
+              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                <div class="flex items-center gap-2">
+                  <button
+                    class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-white/40 transition-colors"
+                    @click.stop="startEdit(post)"
+                  >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                  <button
+                    class="w-10 h-10 bg-red-500/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-red-500 transition-colors"
+                    @click.stop="deletePost(post.id)"
+                  >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div v-if="hasMultipleMedia(post)" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
+                </svg>
+              </div>
+              <div v-else-if="post.videoPath" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+              <div class="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-white text-xs">
+                {{ post.heartCount || 0 }} ♡
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="hasMore" class="text-center py-8">
+            <button
+              class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full hover:from-purple-400 hover:to-pink-400 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
+              @click="loadMorePosts"
+            >
+              Load More
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div>
+      <div v-if="activeTab === 'settings'">
         <h2 class="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">Settings</h2>
         <div :class="isDark ? 'p-6 bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl space-y-6' : 'p-6 bg-gradient-to-br from-gray-100 to-white border border-black/10 rounded-2xl space-y-6'">
           <div class="flex items-center gap-4">
@@ -513,13 +627,6 @@ function getEditPhotos(post: Post) {
                   : 'w-full mt-1 px-4 py-3 bg-white border border-black/10 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-pink-500/50 transition-all duration-300'"
               />
             </div>
-            <button
-              :disabled="savingSiteName"
-              class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
-              @click="saveSiteName"
-            >
-              {{ savingSiteName ? 'Saving...' : 'Save' }}
-            </button>
           </div>
           
           <div class="flex items-center gap-4">
@@ -534,13 +641,6 @@ function getEditPhotos(post: Post) {
                   : 'w-full mt-1 px-4 py-3 bg-white border border-black/10 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-pink-500/50 transition-all duration-300'"
               />
             </div>
-            <button
-              :disabled="savingDisplayName"
-              class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
-              @click="saveDisplayName"
-            >
-              {{ savingDisplayName ? 'Saving...' : 'Save' }}
-            </button>
           </div>
           
           <div class="flex items-center gap-4">
@@ -555,111 +655,148 @@ function getEditPhotos(post: Post) {
                   : 'w-full mt-1 px-4 py-3 bg-white border border-black/10 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:border-pink-500/50 transition-all duration-300'"
               />
             </div>
+          </div>
+
+          <div class="pt-4 border-t border-white/10">
+            <h3 :class="isDark ? 'text-lg font-semibold text-white mb-4' : 'text-lg font-semibold text-gray-900 mb-4'">Comments</h3>
+            <div class="space-y-4">
+              <div class="flex items-center gap-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input
+                    v-model="commentsEnabled"
+                    type="checkbox"
+                    class="w-5 h-5 rounded border-white/20 bg-white/10 text-purple-500 focus:ring-purple-500"
+                  />
+                  <span :class="isDark ? 'text-sm text-white' : 'text-sm text-gray-900'">Enable Comments</span>
+                </label>
+              </div>
+
+              <div v-if="commentsEnabled" class="flex items-center gap-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input
+                    v-model="commentsModerated"
+                    type="checkbox"
+                    class="w-5 h-5 rounded border-white/20 bg-white/10 text-purple-500 focus:ring-purple-500"
+                  />
+                  <span :class="isDark ? 'text-sm text-white' : 'text-sm text-gray-900'">Moderate Comments (require approval before showing)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-white/10">
             <button
-              :disabled="savingSitePassword"
-              class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50"
-              @click="saveSitePassword"
+              :disabled="savingSettings"
+              class="w-full py-4 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white font-bold rounded-xl hover:from-purple-500 hover:via-pink-500 hover:to-orange-400 transition-all duration-300 disabled:opacity-50 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-[1.01] active:scale-[0.99]"
+              @click="saveSettings"
             >
-              {{ savingSitePassword ? 'Saving...' : 'Save' }}
+              <span v-if="savingSettings" class="flex items-center justify-center gap-2">
+                <div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                Saving...
+              </span>
+              <span v-else>Save All Settings</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div class="mt-12">
-        <h2 class="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">Your Posts ({{ posts.length }})</h2>
-        <div class="grid grid-cols-3 gap-3">
-          <div 
-            v-for="(post, index) in posts" 
-            :key="post.id" 
-            class="relative group aspect-square"
-          >
-            <div :class="isDark ? 'absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl overflow-hidden' : 'absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 rounded-xl overflow-hidden'">
-              <video v-if="post.videoPath" :src="post.videoPath.path" class="w-full h-full object-cover" muted></video>
-              <img v-else :src="post.photos && post.photos.length > 0 ? post.photos.sort((a, b) => a.orderIndex - b.orderIndex)[0].path : post.photoPath" class="w-full h-full object-cover" />
-              <div v-if="post.photos && post.photos.length > 1" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
-                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M4 4h4v4H4V4zm6 0h4v4h-4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4zm6 0h4v4h-4v-4z"/>
-                </svg>
-              </div>
-              <div v-else-if="post.videoPath" class="absolute top-2 right-2 w-6 h-6 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center">
-                <svg class="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-              </div>
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300" ></div>
+      <div v-if="activeTab === 'comments'">
+        <div v-if="!commentsEnabled" class="text-center py-20">
+          <p :class="isDark ? 'text-gray-500' : 'text-gray-400'">Comments are not enabled. Go to Settings to enable them.</p>
+        </div>
+        <div v-else>
+          <div v-if="commentsModerated" class="mb-8">
+            <h2 class="text-2xl font-bold mb-4 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">Pending Comments ({{ comments.filter(c => !c.isApproved).length }})</h2>
+            <div v-if="comments.filter(c => !c.isApproved).length === 0" :class="isDark ? 'p-6 bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl text-center' : 'p-6 bg-gradient-to-br from-gray-100 to-white border border-black/10 rounded-2xl text-center'">
+              <p :class="isDark ? 'text-gray-400' : 'text-gray-500'">No pending comments</p>
             </div>
-            
-            <div 
-              :class="[
-                'absolute top-2 z-20',
-                (index % 3 === 0) ? 'left-2 right-auto' : 'right-2 left-auto'
-              ]"
-            >
-              <button
-                class="w-8 h-8 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
-                @click.stop="toggleMenu(post.id)"
+            <div v-else class="space-y-4">
+              <div
+                v-for="comment in comments.filter(c => !c.isApproved)"
+                :key="comment.id"
+                :class="isDark ? 'p-4 bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-xl' : 'p-4 bg-gradient-to-br from-gray-100 to-white border border-black/10 rounded-xl'"
               >
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                </svg>
-              </button>
-              
-              <div 
-                v-if="activeMenuPost === post.id"
-                :class="[
-                  'absolute top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl z-30',
-                  (index % 3 === 0) ? 'left-0 right-auto' : 'right-0 left-auto'
-                ]"
+                <div class="flex items-start gap-4">
+                  <div v-if="comment.postVideoPath" class="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-purple-900 to-pink-900 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </div>
+                  <div v-else-if="comment.postPhotoPath" class="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                    <img :src="comment.postPhotoPath" class="w-full h-full object-cover" />
+                  </div>
+                  <div v-else class="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                    <span class="text-xs text-gray-500 text-center p-1">No image</span>
+                  </div>
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="px-2 py-0.5 bg-yellow-500/20 text-yellow-500 text-xs rounded">Pending</span>
+                      <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">
+                        on: {{ comment.postDescription || 'Post #' + comment.postId }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold" :class="isDark ? 'text-white' : 'text-gray-900'">{{ comment.authorName }}</span>
+                      <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ new Date(comment.createdAt).toLocaleDateString() }}</span>
+                    </div>
+                    <p class="mt-1 text-sm" :class="isDark ? 'text-gray-300' : 'text-gray-600'">{{ comment.content }}</p>
+                  </div>
+                  <div class="flex items-center gap-2 ml-4">
+                    <button
+                      class="px-3 py-1 bg-green-500/20 text-green-500 text-xs font-semibold rounded-lg hover:bg-green-500/30 transition-colors"
+                      @click="approveComment(comment.id)"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      class="px-3 py-1 bg-red-500/20 text-red-500 text-xs font-semibold rounded-lg hover:bg-red-500/30 transition-colors"
+                      @click="deleteComment(comment.id)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h2 class="text-2xl font-bold mb-4 bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">All Comments</h2>
+            <div v-if="comments.length === 0" :class="isDark ? 'p-6 bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl text-center' : 'p-6 bg-gradient-to-br from-gray-100 to-white border border-black/10 rounded-2xl text-center'">
+              <p :class="isDark ? 'text-gray-400' : 'text-gray-500'">No comments yet</p>
+            </div>
+            <div v-else class="space-y-4">
+              <div
+                v-for="comment in comments"
+                :key="comment.id"
+                :class="isDark ? 'p-4 bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-xl' : 'p-4 bg-gradient-to-br from-gray-100 to-white border border-black/10 rounded-xl'"
               >
-                <div class="post-context-menu" :class="isDark ? 'bg-black border border-white/20' : 'bg-white border-black/20'">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold" :class="isDark ? 'text-white' : 'text-gray-900'">{{ comment.authorName }}</span>
+                      <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-gray-400'">{{ new Date(comment.createdAt).toLocaleDateString() }}</span>
+                      <span v-if="!comment.isApproved" class="px-2 py-0.5 bg-yellow-500/20 text-yellow-500 text-xs rounded">Pending</span>
+                    </div>
+                    <p class="mt-1 text-sm" :class="isDark ? 'text-gray-300' : 'text-gray-600'">{{ comment.content }}</p>
+                  </div>
                   <button
-                    class="w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors"
-                    :class="isDark ? 'text-white bg-gray-900 hover:bg-gray-700' : 'text-gray-900 bg-gray-50 hover:bg-gray-200'"
-                    @click="startEdit(post)"
+                    class="px-3 py-1 bg-red-500/20 text-red-500 text-xs font-semibold rounded-lg hover:bg-red-500/30 transition-colors ml-4"
+                    @click="deleteComment(comment.id)"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit
-                  </button>
-                  <button
-                    class="w-full px-4 py-3 text-left text-sm flex items-center gap-3 transition-colors text-red-500"
-                    :class="isDark ? 'bg-gray-900 hover:bg-red-500/20' : 'bg-gray-50 hover:bg-red-50'"
-                    @click="deletePost(post.id)"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
                     Delete
                   </button>
                 </div>
               </div>
             </div>
-            
-            <p
-v-if="post.description" :class="[
-              'absolute bottom-0 left-0 right-0 p-3 text-sm text-white/90 truncate z-10',
-              'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300'
-            ]">
-              {{ post.description }}
-            </p>
-          </div>
-          <div v-if="posts.length === 0" class="col-span-3 text-center py-20">
-            <div :class="isDark ? 'w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-800 to-gray-900 rounded-full flex items-center justify-center' : 'w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center'">
-              <svg :class="isDark ? 'w-10 h-10 text-gray-600' : 'w-10 h-10 text-gray-500'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+            <div v-if="hasMoreComments" class="text-center py-6">
+              <button
+                class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full hover:from-purple-400 hover:to-pink-400 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
+                @click="loadMoreComments"
+              >
+                Load More
+              </button>
             </div>
-            <p :class="isDark ? 'text-gray-500' : 'text-gray-400'">No posts yet</p>
-          </div>
-          <div v-if="hasMore" class="col-span-3 text-center py-8">
-            <button
-              class="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold rounded-full hover:from-purple-400 hover:to-pink-400 transition-all duration-300 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105"
-              @click="loadMorePosts"
-            >
-              Load More
-            </button>
           </div>
         </div>
       </div>
