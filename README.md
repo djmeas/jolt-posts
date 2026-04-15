@@ -58,6 +58,19 @@ Open [http://localhost:3000](http://localhost:3000).
 |----------|-------------|
 | `NUXT_SESSION_PASSWORD` | 32+ char password for session encryption |
 | `NUXT_ADMIN_PASSWORD` | Password for admin login at `/admin/login` |
+| `NUXT_SESSION_COOKIE_SECURE` | Optional. Defaults to `true`. Set to `false` only if the app is served over plain HTTP (see below). |
+
+### Session cookies: HTTPS or localhost
+
+Sessions use **encrypted cookies** with the **`Secure` flag** by default. Browsers only send those cookies over **HTTPS**, with one common exception: **`http://localhost`** (and similar loopback URLs) are treated as a secure enough context for local development.
+
+So:
+
+- **`https://your-domain`** or **`https://your-vps`** (TLS in front of the app) — works with the default settings.
+- **`http://localhost:3000`** / **`http://localhost:7733`** (Docker) — usually works for login and sessions.
+- **`http://203.0.113.10:7733`** (HTTP to a public IP) — the browser will **not** keep the session cookie, so admin and user login appear to fail or redirect in a loop.
+
+**If you must use HTTP to a public host** (not recommended for production), set `NUXT_SESSION_COOKIE_SECURE=false` in the same `.env` your process or Docker Compose loads, then restart. Prefer terminating **HTTPS** at a reverse proxy (nginx, Caddy, etc.) and keeping `Secure` cookies enabled instead.
 
 ## Project Structure
 
@@ -121,5 +134,7 @@ docker-compose up --build
 ```
 
 App available at `http://localhost:7733`
+
+If you deploy the same image to a VPS and open it as **`http://<ip>:<port>`** without TLS, add `NUXT_SESSION_COOKIE_SECURE=false` to that server’s `.env` (or use HTTPS). See [Session cookies: HTTPS or localhost](#session-cookies-https-or-localhost) above.
 
 See [AGENTS.md](./AGENTS.md) for full documentation.
