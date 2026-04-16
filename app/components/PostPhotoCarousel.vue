@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCarousel } from '~/composables/useCarousel'
+
 interface Media {
   type: 'photo' | 'video'
   path: string
@@ -9,70 +11,25 @@ const props = defineProps<{
   photos: Media[]
 }>()
 
-const currentIndex = ref(0)
-const isDragging = ref(false)
-const startX = ref(0)
-const currentX = ref(0)
-const isTouchSwiping = ref(false)
-
-function goTo(index: number) {
-  currentIndex.value = Math.max(0, Math.min(index, props.photos.length - 1))
-}
-
-function prev() {
-  goTo(currentIndex.value - 1)
-}
-
-function next() {
-  goTo(currentIndex.value + 1)
-}
+const {
+  currentIndex,
+  isDragging,
+  isTouchSwiping,
+  hasMultiple,
+  dragOffset,
+  goTo,
+  prev,
+  next,
+  handlePointerDown,
+  handlePointerMove,
+  handlePointerUp,
+  handleTouchStart,
+  handleTouchMove,
+  handleTouchEnd,
+} = useCarousel(props.photos)
 
 function onPointerDown(e: PointerEvent) {
-  if (props.photos.length <= 1) return
-  if (e.target instanceof HTMLElement && e.target.closest('button')) return
-  if (e.target instanceof HTMLElement && e.target.closest('video')) return
-  isDragging.value = true
-  isTouchSwiping.value = false
-  startX.value = e.clientX
-  currentX.value = e.clientX
-  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-}
-
-function onPointerMove(e: PointerEvent) {
-  if (!isDragging.value || isTouchSwiping.value) return
-  currentX.value = e.clientX
-}
-
-function onPointerUp() {
-  if (!isDragging.value) return
-  if (!isTouchSwiping.value) {
-    const diff = currentX.value - startX.value
-    if (diff > 50) prev()
-    else if (diff < -50) next()
-  }
-  isDragging.value = false
-}
-
-function onTouchStart(e: TouchEvent) {
-  if (props.photos.length <= 1) return
-  isTouchSwiping.value = true
-  isDragging.value = true
-  startX.value = e.touches[0].clientX
-  currentX.value = e.touches[0].clientX
-}
-
-function onTouchMove(e: TouchEvent) {
-  if (!isDragging.value || !isTouchSwiping.value) return
-  currentX.value = e.touches[0].clientX
-}
-
-function onTouchEnd() {
-  if (!isDragging.value || !isTouchSwiping.value) return
-  const diff = currentX.value - startX.value
-  if (diff > 50) prev()
-  else if (diff < -50) next()
-  isDragging.value = false
-  isTouchSwiping.value = false
+  handlePointerDown(e, e.currentTarget as HTMLElement)
 }
 
 function onKeyDown(e: KeyboardEvent) {
@@ -93,13 +50,14 @@ onUnmounted(() => {
   <div
     v-if="photos.length > 0"
     class="relative select-none"
+    style="overscroll-behavior: contain"
   >
     <div
       class="flex"
       :class="isDragging ? 'transition-none' : 'transition-transform duration-300 ease-out'"
       :style="{
-        transform: isDragging ? `translateX(${currentX - startX}px)` : 'translateX(0px)',
-        cursor: photos.length > 1 ? 'grab' : 'default'
+        transform: isDragging ? `translateX(${dragOffset}px)` : 'translateX(0px)',
+        cursor: hasMultiple ? 'grab' : 'default'
       }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
