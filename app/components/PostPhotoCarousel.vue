@@ -16,6 +16,7 @@ const {
   isDragging,
   isTouchSwiping,
   hasMultiple,
+  dragOffset,
   goTo,
   prev,
   next,
@@ -55,8 +56,8 @@ onUnmounted(() => {
       class="flex"
       :class="isDragging ? 'transition-none' : 'transition-transform duration-300 ease-out'"
       :style="{
-        transform: isDragging ? `translateX(${currentX - startX}px)` : 'translateX(0px)',
-        cursor: photos.length > 1 ? 'grab' : 'default'
+        transform: isDragging ? `translateX(${dragOffset}px)` : 'translateX(0px)',
+        cursor: hasMultiple ? 'grab' : 'default'
       }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
