@@ -64,6 +64,7 @@ function onTouchStart(e: TouchEvent) {
 function onTouchMove(e: TouchEvent) {
   if (!isDragging.value || !isTouchSwiping.value) return
   currentX.value = e.touches[0].clientX
+  e.preventDefault()
 }
 
 function onTouchEnd() {
@@ -93,6 +94,7 @@ onUnmounted(() => {
   <div
     v-if="photos.length > 0"
     class="relative select-none"
+    style="overscroll-behavior: contain"
   >
     <div
       class="flex"
